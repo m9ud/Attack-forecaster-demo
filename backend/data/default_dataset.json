@@ -1,0 +1,101 @@
+{
+  "weights": {
+    "MemberOf": 3,
+    "CanRDP": 5,
+    "HasSession": 6,
+    "AdminTo": 7,
+    "WriteDACL": 8,
+    "GenericAll": 9,
+    "Owns": 8,
+    "ForceChangePassword": 7,
+    "ReadLAPSPassword": 8,
+    "AllExtendedRights": 9,
+    "DCSync": 10
+  },
+  "subnets": [
+    { "id": "subnet-1", "cidr": "10.0.1.0/24", "label": "Corporate LAN" },
+    { "id": "subnet-2", "cidr": "10.0.2.0/24", "label": "Server Farm" },
+    { "id": "subnet-3", "cidr": "10.0.3.0/24", "label": "Management VLAN" }
+  ],
+  "nodes": [
+    { "id": "U01", "name": "Mudrek",        "type": "User",     "privilegeLevel": "Low",              "highValue": false, "subnet": "" },
+    { "id": "U02", "name": "Arselan",       "type": "User",     "privilegeLevel": "Mid",              "highValue": false, "subnet": "" },
+    { "id": "U03", "name": "Mutaz",         "type": "User",     "privilegeLevel": "Service",          "highValue": false, "subnet": "" },
+    { "id": "U04", "name": "Sultan",        "type": "User",     "privilegeLevel": "Domain Admin",     "highValue": true,  "subnet": "" },
+    { "id": "G01", "name": "HelpDesk",      "type": "Group",    "privilegeLevel": "",                 "highValue": false, "subnet": "" },
+    { "id": "G02", "name": "ServerAdmins",  "type": "Group",    "privilegeLevel": "",                 "highValue": false, "subnet": "" },
+    { "id": "G03", "name": "DomainAdmins",  "type": "Group",    "privilegeLevel": "",                 "highValue": false, "subnet": "" },
+    { "id": "C01", "name": "Workstation01", "type": "Computer", "privilegeLevel": "",                 "highValue": false, "subnet": "subnet-1" },
+    { "id": "S01", "name": "FileServer",    "type": "Server",   "privilegeLevel": "",                 "highValue": false, "subnet": "subnet-2" },
+    { "id": "DC1", "name": "DC01",          "type": "Server",   "privilegeLevel": "Domain Controller","highValue": true,  "subnet": "subnet-3" }
+  ],
+  "edges": [
+    { "id": "E01", "source": "Mudrek",       "target": "HelpDesk",      "relation": "MemberOf" },
+    { "id": "E02", "source": "Arselan",      "target": "ServerAdmins",  "relation": "MemberOf" },
+    { "id": "E03", "source": "Mutaz",        "target": "ServerAdmins",  "relation": "MemberOf" },
+    { "id": "E04", "source": "Sultan",       "target": "DomainAdmins",  "relation": "MemberOf" },
+    { "id": "E05", "source": "HelpDesk",     "target": "Workstation01", "relation": "AdminTo" },
+    { "id": "E06", "source": "ServerAdmins", "target": "FileServer",    "relation": "AdminTo" },
+    { "id": "E07", "source": "DomainAdmins", "target": "DC01",          "relation": "AdminTo" },
+    { "id": "E08", "source": "Workstation01","target": "Arselan",       "relation": "HasSession" },
+    { "id": "E09", "source": "FileServer",   "target": "Mutaz",         "relation": "HasSession" },
+    { "id": "E10", "source": "DC01",         "target": "Sultan",        "relation": "HasSession" },
+    { "id": "E11", "source": "Mudrek",       "target": "Workstation01", "relation": "CanRDP" },
+    { "id": "E12", "source": "Arselan",      "target": "FileServer",    "relation": "CanRDP" },
+    { "id": "E13", "source": "Mutaz",        "target": "DomainAdmins",  "relation": "GenericAll" },
+    { "id": "E14", "source": "Arselan",      "target": "Mutaz",         "relation": "WriteDACL" },
+    { "id": "E15", "source": "Mudrek",       "target": "Arselan",       "relation": "ForceChangePassword" },
+    { "id": "E16", "source": "DomainAdmins", "target": "DC01",          "relation": "DCSync" },
+    { "id": "E17", "source": "ServerAdmins", "target": "DC01",          "relation": "AdminTo" },
+    { "id": "E18", "source": "Mutaz",        "target": "FileServer",    "relation": "AdminTo" },
+    { "id": "E19", "source": "Arselan",      "target": "Workstation01", "relation": "AdminTo" },
+    { "id": "E20", "source": "HelpDesk",     "target": "FileServer",    "relation": "CanRDP" },
+    { "id": "E21", "source": "Mudrek",       "target": "HelpDesk",      "relation": "WriteDACL" }
+  ],
+  "criticalEdgeId": "E13",
+  "startOptions": ["Mudrek", "Arselan"],
+  "scenarioPresets": {
+    "A": {
+      "label": "What if Mudrek joins ServerAdmins?",
+      "description": "Mudrek gets added to ServerAdmins group → he gains AdminTo FileServer and DC01, opening a direct 3-hop path to the DC.",
+      "mutations": [
+        { "type": "addEdge", "source": "Mudrek", "relation": "MemberOf", "target": "ServerAdmins", "weight": 3 }
+      ]
+    },
+    "B": {
+      "label": "What if Arselan has GenericAll on DomainAdmins?",
+      "description": "Arselan acquires GenericAll ACL on DomainAdmins → he can add himself to the DA group and own the domain without needing Mutaz.",
+      "mutations": [
+        { "type": "addEdge", "source": "Arselan", "relation": "GenericAll", "target": "DomainAdmins", "weight": 9 }
+      ]
+    },
+    "C": {
+      "label": "What if Workstation01 has a session of Mutaz?",
+      "description": "Mutaz logs into Workstation01 → any user with AdminTo on that workstation can steal its credentials and reach DomainAdmins.",
+      "mutations": [
+        { "type": "addEdge", "source": "Workstation01", "relation": "HasSession", "target": "Mutaz", "weight": 6 }
+      ]
+    },
+    "D": {
+      "label": "What if we revoke Mutaz → GenericAll → DomainAdmins?",
+      "description": "Remove the critical GenericAll ACE — this is the most dangerous escalation path. Expected: ≥60% risk reduction.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E13" }
+      ]
+    },
+    "E": {
+      "label": "What if we disable Mutaz entirely?",
+      "description": "Disable the over-privileged service account and remove all its edges. Eliminates every path that chains through it.",
+      "mutations": [
+        { "type": "removeNode", "nodeId": "Mutaz" }
+      ]
+    },
+    "F": {
+      "label": "What if we remove Arselan → WriteDACL → Mutaz?",
+      "description": "Remove Arselan's WriteDACL on Mutaz — a low-impact fix that blocks one intermediate link but leaves other paths open.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E14" }
+      ]
+    }
+  }
+}

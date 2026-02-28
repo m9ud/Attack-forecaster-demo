@@ -1,0 +1,102 @@
+{
+  "weights": {
+    "MemberOf": 3,
+    "CanRDP": 5,
+    "HasSession": 6,
+    "AdminTo": 7,
+    "WriteDACL": 8,
+    "GenericAll": 9,
+    "Owns": 8,
+    "ForceChangePassword": 7,
+    "ReadLAPSPassword": 8,
+    "AllExtendedRights": 9,
+    "DCSync": 10
+  },
+  "subnets": [
+    { "id": "subnet-1", "cidr": "192.168.1.0/24", "label": "Employee LAN" },
+    { "id": "subnet-2", "cidr": "192.168.2.0/24", "label": "DMZ Servers" },
+    { "id": "subnet-3", "cidr": "10.10.0.0/24",   "label": "Domain Controllers" }
+  ],
+  "nodes": [
+    { "id": "U01", "name": "Khalid",       "type": "User",     "privilegeLevel": "Low",              "highValue": false, "subnet": "" },
+    { "id": "U02", "name": "Fatima",       "type": "User",     "privilegeLevel": "Mid",              "highValue": false, "subnet": "" },
+    { "id": "U03", "name": "Omar",         "type": "User",     "privilegeLevel": "Low",              "highValue": false, "subnet": "" },
+    { "id": "U04", "name": "SVC_Backup",   "type": "User",     "privilegeLevel": "Service",          "highValue": false, "subnet": "" },
+    { "id": "U05", "name": "Nasser",       "type": "User",     "privilegeLevel": "Domain Admin",     "highValue": true,  "subnet": "" },
+
+    { "id": "G01", "name": "ITSupport",    "type": "Group",    "privilegeLevel": "",                 "highValue": false, "subnet": "" },
+    { "id": "G02", "name": "DBAdmins",     "type": "Group",    "privilegeLevel": "",                 "highValue": false, "subnet": "" },
+    { "id": "G03", "name": "EnterpriseAdmins", "type": "Group","privilegeLevel": "",                 "highValue": false, "subnet": "" },
+
+    { "id": "C01", "name": "Laptop-HR",    "type": "Computer", "privilegeLevel": "",                 "highValue": false, "subnet": "subnet-1" },
+    { "id": "C02", "name": "Laptop-IT",    "type": "Computer", "privilegeLevel": "",                 "highValue": false, "subnet": "subnet-1" },
+    { "id": "S01", "name": "WebServer",    "type": "Server",   "privilegeLevel": "",                 "highValue": false, "subnet": "subnet-2" },
+    { "id": "S02", "name": "DBServer",     "type": "Server",   "privilegeLevel": "",                 "highValue": true,  "subnet": "subnet-2" },
+    { "id": "DC1", "name": "DC-PRIMARY",   "type": "Server",   "privilegeLevel": "Domain Controller","highValue": true,  "subnet": "subnet-3" }
+  ],
+  "edges": [
+    { "id": "E01", "source": "Khalid",       "target": "ITSupport",       "relation": "MemberOf" },
+    { "id": "E02", "source": "Fatima",       "target": "ITSupport",       "relation": "MemberOf" },
+    { "id": "E03", "source": "Fatima",       "target": "DBAdmins",        "relation": "MemberOf" },
+    { "id": "E04", "source": "Omar",         "target": "ITSupport",       "relation": "MemberOf" },
+    { "id": "E05", "source": "SVC_Backup",   "target": "DBAdmins",        "relation": "MemberOf" },
+    { "id": "E06", "source": "Nasser",       "target": "EnterpriseAdmins","relation": "MemberOf" },
+
+    { "id": "E07", "source": "ITSupport",    "target": "Laptop-HR",       "relation": "AdminTo" },
+    { "id": "E08", "source": "ITSupport",    "target": "Laptop-IT",       "relation": "AdminTo" },
+    { "id": "E09", "source": "DBAdmins",     "target": "DBServer",        "relation": "AdminTo" },
+    { "id": "E10", "source": "EnterpriseAdmins","target": "DC-PRIMARY",   "relation": "AdminTo" },
+
+    { "id": "E11", "source": "Laptop-HR",    "target": "Fatima",          "relation": "HasSession" },
+    { "id": "E12", "source": "Laptop-IT",    "target": "SVC_Backup",      "relation": "HasSession" },
+    { "id": "E13", "source": "DBServer",     "target": "Nasser",          "relation": "HasSession" },
+    { "id": "E14", "source": "DC-PRIMARY",   "target": "Nasser",          "relation": "HasSession" },
+
+    { "id": "E15", "source": "Khalid",       "target": "Laptop-HR",       "relation": "CanRDP" },
+    { "id": "E16", "source": "Omar",         "target": "Laptop-IT",       "relation": "CanRDP" },
+    { "id": "E17", "source": "Fatima",       "target": "WebServer",       "relation": "CanRDP" },
+
+    { "id": "E18", "source": "SVC_Backup",   "target": "EnterpriseAdmins","relation": "GenericAll" },
+    { "id": "E19", "source": "Fatima",       "target": "SVC_Backup",      "relation": "WriteDACL" },
+    { "id": "E20", "source": "Khalid",       "target": "Fatima",          "relation": "ForceChangePassword" },
+    { "id": "E21", "source": "Omar",         "target": "Khalid",          "relation": "ForceChangePassword" },
+    { "id": "E22", "source": "EnterpriseAdmins","target": "DC-PRIMARY",   "relation": "DCSync" },
+
+    { "id": "E23", "source": "WebServer",    "target": "DBServer",        "relation": "AdminTo" },
+    { "id": "E24", "source": "SVC_Backup",   "target": "DBServer",        "relation": "AdminTo" },
+    { "id": "E25", "source": "DBAdmins",     "target": "WebServer",       "relation": "CanRDP" },
+    { "id": "E26", "source": "Omar",         "target": "ITSupport",       "relation": "WriteDACL" }
+  ],
+  "criticalEdgeId": "E18",
+  "startOptions": ["Khalid", "Omar", "Fatima"],
+  "scenarioPresets": {
+    "A": {
+      "label": "What if Omar joins DBAdmins?",
+      "description": "Omar gets added to DBAdmins → gains access to DBServer and WebServer, opening paths through SVC_Backup to DC.",
+      "mutations": [
+        { "type": "addEdge", "source": "Omar", "relation": "MemberOf", "target": "DBAdmins", "weight": 3 }
+      ]
+    },
+    "B": {
+      "label": "What if Khalid has GenericAll on EnterpriseAdmins?",
+      "description": "Khalid acquires GenericAll on EnterpriseAdmins → direct escalation to Domain Admin without needing the SVC_Backup chain.",
+      "mutations": [
+        { "type": "addEdge", "source": "Khalid", "relation": "GenericAll", "target": "EnterpriseAdmins", "weight": 9 }
+      ]
+    },
+    "C": {
+      "label": "What if we revoke SVC_Backup → GenericAll → EnterpriseAdmins?",
+      "description": "Remove the critical GenericAll ACE from the service account. Expected: major risk reduction.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E18" }
+      ]
+    },
+    "D": {
+      "label": "What if we disable SVC_Backup entirely?",
+      "description": "Disable the over-privileged backup service account and remove all its edges.",
+      "mutations": [
+        { "type": "removeNode", "nodeId": "SVC_Backup" }
+      ]
+    }
+  }
+}
