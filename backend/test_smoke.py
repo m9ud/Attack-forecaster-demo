@@ -1,10 +1,15 @@
 """Quick smoke test for the graph engine."""
+from app import dataset as ds
 from app.graph_engine import GraphEngine
+
+ds.reset_to_default()
 
 e = GraphEngine()
 r = e.analyze(
-    ["User_LowPriv1", "User_LowPriv2", "User_LowPriv3", "User_LowPriv4"],
-    "DC01",
+    ["tywin.lannister", "arya.stark", "samwell.tarly"],
+    "kingslanding",
+    min_depth=3,
+    max_depth=10,
 )
 print(f"Paths: {r['totalPaths']}")
 print(f"Global Risk: {r['globalRisk']}")

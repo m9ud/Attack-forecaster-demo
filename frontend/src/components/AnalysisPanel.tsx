@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../store';
+import { PlayIcon } from './Icons';
 
 export default function AnalysisPanel() {
   const runAnalysis = useStore((s: any) => s.runAnalysis);
   const startOptions = useStore((s: any) => s.startOptions);
   const nodes = useStore((s: any) => s.nodes);
   const [selected, setSelected] = useState<string[]>([]);
-  const [target, setTarget] = useState('DC01');
+  const [target, setTarget] = useState('');
 
   // Initialize selected when startOptions load
   useEffect(() => {
@@ -17,13 +18,21 @@ export default function AnalysisPanel() {
     }
   }, [startOptions]);
 
+  useEffect(() => {
+    if (nodes.length > 0 && !target) {
+      const dc = nodes.find((n: any) => n.privilegeLevel === 'Domain Controller')
+        ?? nodes.find((n: any) => n.highValue);
+      if (dc) setTarget(dc.name);
+    }
+  }, [nodes]);
+
   const toggle = (name: string) => {
     setSelected((prev) =>
       prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
     );
   };
 
-  const dcNodes = nodes.filter((n: any) => n.name.startsWith('DC') || n.privilegeLevel === 'Domain Controller');
+  const dcNodes = nodes.filter((n: any) => n.privilegeLevel === 'Domain Controller' || n.highValue);
 
   return (
     <div className="panel">
@@ -47,9 +56,9 @@ export default function AnalysisPanel() {
         <label>Target Node</label>
         <select value={target} onChange={(e) => setTarget(e.target.value)}>
           {dcNodes.length > 0 ? dcNodes.map((n: any) => (
-            <option key={n.name} value={n.name}>{n.name} ({n.privilegeLevel || 'DC'})</option>
+            <option key={n.name} value={n.name}>{n.name} ({n.privilegeLevel || n.type})</option>
           )) : (
-            <option value="DC01">DC01 (Domain Controller)</option>
+            <option value="">(select target)</option>
           )}
         </select>
       </div>
@@ -57,8 +66,10 @@ export default function AnalysisPanel() {
         className="btn-primary"
         onClick={() => runAnalysis(selected, target)}
         disabled={selected.length === 0}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
       >
-        &#9654; Analyze Attack Paths
+        <PlayIcon size={14} />
+        Analyze Attack Paths
       </button>
     </div>
   );

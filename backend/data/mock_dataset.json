@@ -1,0 +1,114 @@
+{
+  "weights": {
+    "MemberOf": 3,
+    "CanRDP": 5,
+    "HasSession": 6,
+    "AdminTo": 7,
+    "WriteDACL": 8,
+    "GenericAll": 9,
+    "GenericWrite": 8,
+    "ForceChangePassword": 7,
+    "DCSync": 10
+  },
+  "subnets": [
+    { "id": "subnet-cis", "cidr": "10.10.10.0/24", "label": "cis.squ.edu.om" },
+    { "id": "subnet-dcs", "cidr": "10.10.20.0/24", "label": "dcs.squ.edu.om" }
+  ],
+  "nodes": [
+    { "id": "U01", "name": "mudrek",     "type": "User", "privilegeLevel": "Low", "highValue": true,  "subnet": "" },
+    { "id": "U02", "name": "khalid.day", "type": "User", "privilegeLevel": "Low", "highValue": false, "subnet": "" },
+    { "id": "U03", "name": "shadha",     "type": "User", "privilegeLevel": "Domain Admin", "highValue": true,  "subnet": "" },
+    { "id": "U04", "name": "touzene",    "type": "User", "privilegeLevel": "Mid", "highValue": false, "subnet": "" },
+    { "id": "U05", "name": "faiza",      "type": "User", "privilegeLevel": "Low", "highValue": false, "subnet": "" },
+    { "id": "U06", "name": "sultan",     "type": "User", "privilegeLevel": "Low", "highValue": false, "subnet": "" },
+    { "id": "U07", "name": "almutaz",    "type": "User", "privilegeLevel": "Low", "highValue": false, "subnet": "" },
+    { "id": "U08", "name": "Arselan",    "type": "User", "privilegeLevel": "Low", "highValue": false, "subnet": "" },
+
+    { "id": "G01", "name": "IT Admins",    "type": "Group", "privilegeLevel": "", "highValue": true,  "subnet": "subnet-cis" },
+    { "id": "G02", "name": "CIS Council",  "type": "Group", "privilegeLevel": "", "highValue": false, "subnet": "subnet-cis" },
+    { "id": "G03", "name": "DCS IT Admins","type": "Group", "privilegeLevel": "", "highValue": true,  "subnet": "subnet-dcs" },
+    { "id": "G04", "name": "DCS Staff",    "type": "Group", "privilegeLevel": "", "highValue": false, "subnet": "subnet-dcs" },
+    { "id": "G05", "name": "Lab Users",    "type": "Group", "privilegeLevel": "", "highValue": false, "subnet": "subnet-dcs" },
+
+    { "id": "H01", "name": "cis-dc01",    "type": "Server",   "privilegeLevel": "Domain Controller", "highValue": true,  "subnet": "subnet-cis" },
+    { "id": "H02", "name": "dcs-server01","type": "Server",   "privilegeLevel": "Domain Controller", "highValue": true,  "subnet": "subnet-dcs" },
+    { "id": "H03", "name": "lab18",       "type": "Computer", "privilegeLevel": "",                  "highValue": false, "subnet": "subnet-dcs" },
+    { "id": "H04", "name": "lab22",       "type": "Computer", "privilegeLevel": "",                  "highValue": false, "subnet": "subnet-dcs" },
+    { "id": "H05", "name": "lab19",       "type": "Computer", "privilegeLevel": "",                  "highValue": false, "subnet": "subnet-dcs" }
+  ],
+  "edges": [
+    { "id": "E01", "source": "shadha",  "target": "IT Admins",    "relation": "MemberOf" },
+    { "id": "E02", "source": "shadha",  "target": "CIS Council",  "relation": "MemberOf" },
+    { "id": "E03", "source": "touzene", "target": "CIS Council",  "relation": "MemberOf" },
+    { "id": "E04", "source": "touzene", "target": "DCS IT Admins","relation": "MemberOf" },
+    { "id": "E05", "source": "faiza",   "target": "DCS Staff",    "relation": "MemberOf" },
+    { "id": "E06", "source": "sultan",  "target": "DCS Staff",    "relation": "MemberOf" },
+    { "id": "E07", "source": "sultan",  "target": "Lab Users",    "relation": "MemberOf" },
+    { "id": "E08", "source": "almutaz", "target": "Lab Users",    "relation": "MemberOf" },
+    { "id": "E09", "source": "Arselan", "target": "Lab Users",    "relation": "MemberOf" },
+
+    { "id": "E10", "source": "shadha",        "target": "cis-dc01",    "relation": "AdminTo"    },
+    { "id": "E11", "source": "IT Admins",     "target": "cis-dc01",    "relation": "AdminTo"    },
+    { "id": "E12", "source": "IT Admins",     "target": "cis-dc01",    "relation": "DCSync"     },
+    { "id": "E13", "source": "touzene",       "target": "dcs-server01","relation": "AdminTo"    },
+    { "id": "E14", "source": "DCS IT Admins", "target": "dcs-server01","relation": "AdminTo"    },
+    { "id": "E15", "source": "DCS IT Admins", "target": "dcs-server01","relation": "DCSync"     },
+    { "id": "E16", "source": "DCS IT Admins", "target": "cis-dc01",    "relation": "GenericAll" },
+
+    { "id": "E17", "source": "CIS Council", "target": "cis-dc01",    "relation": "CanRDP" },
+    { "id": "E18", "source": "DCS Staff",   "target": "dcs-server01","relation": "CanRDP" },
+    { "id": "E19", "source": "Lab Users",   "target": "lab18",        "relation": "CanRDP" },
+    { "id": "E20", "source": "Lab Users",   "target": "lab22",        "relation": "CanRDP" },
+    { "id": "E21", "source": "Lab Users",   "target": "lab19",        "relation": "CanRDP" },
+
+    { "id": "E22", "source": "cis-dc01",    "target": "shadha",  "relation": "HasSession" },
+    { "id": "E23", "source": "dcs-server01","target": "touzene", "relation": "HasSession" },
+    { "id": "E24", "source": "lab18",       "target": "almutaz", "relation": "HasSession" },
+
+    { "id": "E25", "source": "mudrek",     "target": "khalid.day", "relation": "ForceChangePassword" },
+    { "id": "E26", "source": "khalid.day", "target": "touzene",    "relation": "WriteDACL"           },
+    { "id": "E27", "source": "touzene",    "target": "cis-dc01",   "relation": "GenericAll"          },
+
+    { "id": "E28", "source": "mudrek",  "target": "shadha",        "relation": "GenericWrite" },
+    { "id": "E29", "source": "almutaz", "target": "DCS IT Admins", "relation": "GenericAll"   }
+  ],
+  "criticalEdgeId": "E25",
+  "startOptions": ["mudrek", "sultan", "Arselan"],
+  "scenarioPresets": {
+    "A": {
+      "label": "What if Arselan gets GenericAll on IT Admins?",
+      "description": "Arselan (a lab student) finds a misconfigured ACL granting GenericAll on IT Admins — 2-hop path straight to cis-dc01.",
+      "mutations": [
+        { "type": "addEdge", "source": "Arselan", "relation": "GenericAll", "target": "IT Admins", "weight": 9 }
+      ]
+    },
+    "B": {
+      "label": "What if khalid.day gets AdminTo on cis-dc01?",
+      "description": "khalid.day is granted local admin on the CIS Domain Controller — a one-hop compromise of the crown jewel.",
+      "mutations": [
+        { "type": "addEdge", "source": "khalid.day", "relation": "AdminTo", "target": "cis-dc01", "weight": 7 }
+      ]
+    },
+    "C": {
+      "label": "What if we revoke DCS IT Admins → GenericAll → cis-dc01?",
+      "description": "Remove the cross-domain trust (E16). Eliminates all DCS-to-CIS domain compromise paths.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E16" }
+      ]
+    },
+    "D": {
+      "label": "What if we block mudrek → khalid.day ForceChangePassword?",
+      "description": "Revoke mudrek's ForceChangePassword on khalid.day (E25) — cuts the escalation chain at its root.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E25" }
+      ]
+    },
+    "E": {
+      "label": "What if touzene loses GenericAll on cis-dc01?",
+      "description": "Removing touzene's GenericAll on the DC (E27) blocks the mudrek → khalid.day → touzene chain.",
+      "mutations": [
+        { "type": "removeEdge", "edgeId": "E27" }
+      ]
+    }
+  }
+}

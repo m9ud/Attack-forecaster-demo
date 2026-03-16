@@ -2,7 +2,7 @@
 
 import type { AnalysisResult, GraphNode, GraphEdge, SimulateResult, MutationDef, SubnetDef } from './types';
 
-const API = 'http://localhost:8000';
+export const API = 'http://localhost:8000';
 
 export async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const r = await fetch(`${API}/graph`);
@@ -110,5 +110,17 @@ export async function resetDataset(): Promise<DatasetInfo & { status: string; me
 export async function fetchDatasetInfo(): Promise<DatasetInfo> {
   const r = await fetch(`${API}/dataset-info`);
   if (!r.ok) throw new Error('Failed to load dataset info');
+  return r.json();
+}
+
+export interface ScenarioPreset {
+  label: string;
+  description: string;
+  mutations: MutationDef[];
+}
+
+export async function fetchScenarios(): Promise<Record<string, ScenarioPreset>> {
+  const r = await fetch(`${API}/scenarios`);
+  if (!r.ok) throw new Error('Failed to load scenarios');
   return r.json();
 }

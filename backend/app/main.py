@@ -5,9 +5,13 @@ Endpoints: /graph, /analyze, /explain, /simulate, /scenarios,
 """
 
 import json
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 from .models import (
     AnalysisRequest, AnalysisResponse,
@@ -192,6 +196,10 @@ async def upload_dataset(file: UploadFile = File(...)):
     if errors:
         raise HTTPException(422, detail={"validationErrors": errors})
 
+    # Auto-convert GOAD format if detected
+    if ds.is_goad_format(raw):
+        raw = ds.convert_goad(raw)
+
     # Swap
     summary = ds.reload_from_json(raw)
     engine = _rebuild_engine()
@@ -222,3 +230,21 @@ def dataset_info():
         "scenarios": len(ds.SCENARIO_PRESETS),
         "startOptions": ds.START_OPTIONS,
     }
+
+
+@app.get("/sample-datasets")
+def list_sample_datasets():
+    """List available sample JSON datasets."""
+    return [
+        p.name for p in _DATA_DIR.glob("*.json")
+        if p.name != "default_dataset.json"
+    ]
+
+
+@app.get("/sample-datasets/{filename}")
+def download_sample_dataset(filename: str):
+    """Download a sample dataset JSON file."""
+    path = (_DATA_DIR / filename).resolve()
+    if not str(path).startswith(str(_DATA_DIR)) or not path.exists():
+        raise HTTPException(404, "Dataset not found")
+    return FileResponse(path, media_type="application/json", filename=filename)

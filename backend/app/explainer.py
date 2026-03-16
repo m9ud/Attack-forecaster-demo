@@ -32,6 +32,41 @@ RELATION_DESC = {
         "is MemberOf {target}\n"
         "  → Inherits all permissions granted to the group"
     ),
+    "GenericWrite": (
+        "has GenericWrite on {target}\n"
+        "  → Can write to non-protected attributes\n"
+        "  → Can set SPN for Kerberoasting or modify logon script"
+    ),
+    "WriteOwner": (
+        "has WriteOwner on {target}\n"
+        "  → Can change object owner to self\n"
+        "  → Then grant self full control via WriteDACL"
+    ),
+    "AddSelf": (
+        "has AddSelf on {target}\n"
+        "  → Can add themselves as a member of the group\n"
+        "  → Inherits all group permissions immediately"
+    ),
+    "AddMember": (
+        "has AddMember on {target}\n"
+        "  → Can add any principal to the group\n"
+        "  → Grants group permissions to the added principal"
+    ),
+    "ForceChangePassword": (
+        "has ForceChangePassword on {target}\n"
+        "  → Can reset the user's password without knowing the old one\n"
+        "  → Takes over the account entirely"
+    ),
+    "DCSync": (
+        "has DCSync rights on {target}\n"
+        "  → Can replicate directory changes from the DC\n"
+        "  → Extracts all password hashes including krbtgt"
+    ),
+    "SQLAdmin": (
+        "is SQL sysadmin on {target}\n"
+        "  → Can execute commands via xp_cmdshell\n"
+        "  → Gains OS-level code execution on the server"
+    ),
 }
 
 PRIV_GAIN = {
@@ -41,6 +76,13 @@ PRIV_GAIN = {
     "HasSession": "Credentials of {target}",
     "CanRDP": "Interactive session on {target}",
     "MemberOf": "Group membership in {target}",
+    "GenericWrite": "Write access on {target}",
+    "WriteOwner": "Ownership of {target}",
+    "AddSelf": "Self-added membership in {target}",
+    "AddMember": "Can add members to {target}",
+    "ForceChangePassword": "Account takeover of {target}",
+    "DCSync": "All password hashes from {target}",
+    "SQLAdmin": "OS-level execution on {target}",
 }
 
 
