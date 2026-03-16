@@ -6,11 +6,13 @@ import type {
   MutationDef, PathInfo, SubnetDef, NodeFilters, EdgeFilters,
 } from './types';
 import * as api from './api';
+import type { ScenarioPreset } from './api';
 
 const ALL_EDGE_TYPES = [
   'MemberOf', 'AdminTo', 'HasSession', 'CanRDP',
   'GenericAll', 'WriteDACL', 'Owns',
   'ForceChangePassword', 'ReadLAPSPassword', 'AllExtendedRights', 'DCSync',
+  'GenericWrite', 'WriteOwner', 'AddSelf', 'AddMember', 'SQLAdmin',
 ];
 
 const DEFAULT_NODE_FILTERS: NodeFilters = {
@@ -30,9 +32,9 @@ const DEFAULT_EDGE_FILTERS: EdgeFilters = {
 
 const DEFAULT_ANALYSIS = {
   startNodes: [] as string[],
-  targetNode: 'DC01',
+  targetNode: 'kingslanding',
   minDepth: 1,
-  maxDepth: 7,
+  maxDepth: 10,
   k: 50,
 };
 
@@ -49,6 +51,7 @@ interface AppState {
   edges: GraphEdge[];
   subnets: SubnetDef[];
   startOptions: string[];
+  scenarioPresets: Record<string, ScenarioPreset>;
   analysis: AnalysisResult | null;
   selectedPathId: string | null;
   scenario: SimulateResult | null;
@@ -119,6 +122,7 @@ export const useStore = create<AppState>((set: any, get: any) => ({
   edges: [],
   subnets: [],
   startOptions: [],
+  scenarioPresets: {},
   analysis: null,
   selectedPathId: null,
   scenario: null,
@@ -148,14 +152,14 @@ export const useStore = create<AppState>((set: any, get: any) => ({
 
   loadGraph: async () => {
     try {
-      const [data, subnets, startOptions] = await Promise.all([
+      const [data, subnets, startOptions, scenarioPresets] = await Promise.all([
         api.fetchGraph(),
         api.fetchSubnets(),
         api.fetchStartOptions(),
+        api.fetchScenarios(),
       ]);
-      // Initialize default analysis start nodes
       DEFAULT_ANALYSIS.startNodes = startOptions.slice(0, 4);
-      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions });
+      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions, scenarioPresets });
     } catch (e: any) {
       set({ error: e.message });
     }
@@ -168,7 +172,7 @@ export const useStore = create<AppState>((set: any, get: any) => ({
         startNodes,
         targetNode: target,
         minDepth: 1,
-        maxDepth: 7,
+        maxDepth: 10,
         k: 50,
       });
       set({ analysis: result, loading: false });
@@ -262,13 +266,13 @@ export const useStore = create<AppState>((set: any, get: any) => ({
     set({ datasetUploading: true, error: null, analysis: null, scenario: null, selectedPathId: null, scenarioHighlight: null });
     try {
       await api.uploadDataset(file);
-      // Reload graph with new dataset
-      const [data, subnets, startOptions] = await Promise.all([
+      const [data, subnets, startOptions, scenarioPresets] = await Promise.all([
         api.fetchGraph(),
         api.fetchSubnets(),
         api.fetchStartOptions(),
+        api.fetchScenarios(),
       ]);
-      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions, datasetUploading: false });
+      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions, scenarioPresets, datasetUploading: false });
     } catch (e: any) {
       set({ datasetUploading: false, error: e.message });
     }
@@ -278,12 +282,13 @@ export const useStore = create<AppState>((set: any, get: any) => ({
     set({ datasetUploading: true, error: null, analysis: null, scenario: null, selectedPathId: null, scenarioHighlight: null });
     try {
       await api.resetDataset();
-      const [data, subnets, startOptions] = await Promise.all([
+      const [data, subnets, startOptions, scenarioPresets] = await Promise.all([
         api.fetchGraph(),
         api.fetchSubnets(),
         api.fetchStartOptions(),
+        api.fetchScenarios(),
       ]);
-      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions, datasetUploading: false });
+      set({ nodes: data.nodes, edges: data.edges, subnets, startOptions, scenarioPresets, datasetUploading: false });
     } catch (e: any) {
       set({ datasetUploading: false, error: e.message });
     }

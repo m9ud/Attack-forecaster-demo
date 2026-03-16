@@ -1,88 +1,7 @@
-/* ── What-If Scenario Panel — 6 scenarios (offensive + defensive) ──── */
+/* ── What-If Scenario Panel — dynamic presets loaded from dataset ──── */
 
 import { useStore } from '../store';
-import type { MutationDef } from '../types';
-
-interface ScenarioDef {
-  id: string;
-  category: 'offensive' | 'defensive';
-  label: string;
-  desc: string;
-  detail: string;
-  mutations: MutationDef[];
-}
-
-const SCENARIOS: ScenarioDef[] = [
-  /* ── Offensive: "What if an attacker gains…" ────────────────────── */
-  {
-    id: 'A',
-    category: 'offensive',
-    label: 'What if Mudrek joins ServerAdmins?',
-    desc: 'Mudrek → MemberOf → ServerAdmins → AdminTo → DC01',
-    detail:
-      'Mudrek joins ServerAdmins, gaining AdminTo on FileServer and DC01. ' +
-      'Opens a direct 3-hop escalation path.',
-    mutations: [
-      { type: 'addEdge', source: 'Mudrek', relation: 'MemberOf', target: 'ServerAdmins', weight: 3 },
-    ],
-  },
-  {
-    id: 'B',
-    category: 'offensive',
-    label: 'What if Arselan has GenericAll on DomainAdmins?',
-    desc: 'Arselan → GenericAll → DomainAdmins → AdminTo → DC01',
-    detail:
-      'Arselan gets GenericAll on DomainAdmins — he can add himself to DA ' +
-      'and DCSync the domain without needing Mutaz.',
-    mutations: [
-      { type: 'addEdge', source: 'Arselan', relation: 'GenericAll', target: 'DomainAdmins', weight: 9 },
-    ],
-  },
-  {
-    id: 'C',
-    category: 'offensive',
-    label: 'What if Workstation01 has a session of Mutaz?',
-    desc: 'WS01 → HasSession → Mutaz → GenericAll → DomainAdmins',
-    detail:
-      'Mutaz logs into Workstation01. Anyone with AdminTo on WS01 ' +
-      'can steal its creds and reach DomainAdmins.',
-    mutations: [
-      { type: 'addEdge', source: 'Workstation01', relation: 'HasSession', target: 'Mutaz', weight: 6 },
-    ],
-  },
-
-  /* ── Defensive: "What if we remediate…" ─────────────────────────── */
-  {
-    id: 'D',
-    category: 'defensive',
-    label: 'What if we revoke Mutaz → GenericAll → DomainAdmins?',
-    desc: 'Remove critical ACE (E13) — blocks the main escalation',
-    detail:
-      'Revoke Mutaz GenericAll ACE on DomainAdmins. This is the single ' +
-      'most dangerous edge. Expected ≥60% risk reduction.',
-    mutations: [{ type: 'removeEdge', edgeId: 'E13' }],
-  },
-  {
-    id: 'E',
-    category: 'defensive',
-    label: 'What if we disable Mutaz entirely?',
-    desc: 'Remove service account + all edges',
-    detail:
-      'Disable the over-privileged service account. Eliminates every ' +
-      'path that chains through Mutaz.',
-    mutations: [{ type: 'removeNode', nodeId: 'Mutaz' }],
-  },
-  {
-    id: 'F',
-    category: 'defensive',
-    label: 'What if we remove Arselan → WriteDACL → Mutaz?',
-    desc: 'Remove E14 — low-impact fix',
-    detail:
-      'Remove Arselan\'s WriteDACL on Mutaz. Blocks one intermediate ' +
-      'link but leaves other paths open. Expected <15% reduction.',
-    mutations: [{ type: 'removeEdge', edgeId: 'E14' }],
-  },
-];
+import { ZapIcon } from './Icons';
 
 /* ── Delta helpers ──────────────────────────────────────────────────── */
 function deltaLabel(before: number, after: number): string {
@@ -124,74 +43,89 @@ export default function ScenarioPanel() {
   const runScenario = useStore((s: any) => s.runScenario);
   const scenarioHighlight = useStore((s: any) => s.scenarioHighlight);
   const loading = useStore((s: any) => s.loading);
+  const scenarioPresets = useStore((s: any) => s.scenarioPresets) as Record<string, { label: string; description: string; mutations: any[] }>;
 
-  const offensive = SCENARIOS.filter((s) => s.category === 'offensive');
-  const defensive = SCENARIOS.filter((s) => s.category === 'defensive');
+  // Derive offensive/defensive from mutation types
+  const presetEntries = Object.entries(scenarioPresets);
+  const offensive = presetEntries.filter(([, p]) => p.mutations.some((m) => m.type === 'addEdge'));
+  const defensive = presetEntries.filter(([, p]) => p.mutations.every((m) => m.type !== 'addEdge'));
 
-  const activeScenarioDef = scenario
-    ? SCENARIOS.find((s) => s.label === scenarioLabel)
-    : null;
+  const activeId = scenario ? Object.entries(scenarioPresets).find(([, p]) => p.label === scenarioLabel)?.[0] : null;
+  const activePreset = activeId ? scenarioPresets[activeId] : null;
+  const isActiveOffensive = activePreset?.mutations.some((m: any) => m.type === 'addEdge') ?? false;
 
   return (
     <div className="panel scenario-panel">
-      <h3>⚡ What-If Engine</h3>
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: 'var(--accent)', flexShrink: 0, display: 'flex' }}>
+          <ZapIcon size={11} />
+        </span>
+        What-If Engine
+      </h3>
+
+      {presetEntries.length === 0 && (
+        <p className="scenario-empty">No scenarios defined in the loaded dataset.</p>
+      )}
 
       {/* ── Offensive scenarios ──────────────────────────────────────── */}
-      <div className="scenario-category">
-        <h4 className="scenario-cat-title scenario-cat-offensive">
-          🔴 Offensive — "What if an attacker gains…"
-        </h4>
-        <div className="scenario-buttons">
-          {offensive.map((s) => (
-            <button
-              key={s.id}
-              className={`btn-scenario btn-scenario--offensive ${activeScenarioDef?.id === s.id ? 'btn-scenario--active' : ''}`}
-              onClick={() => runScenario(s.id, s.label, s.mutations)}
-              disabled={loading}
-              title={s.detail}
-            >
-              <span className="scenario-btn-id">{s.id}</span>
-              <div className="scenario-btn-content">
-                <span className="scenario-btn-title">{s.label}</span>
-                <small className="scenario-btn-path">{s.desc}</small>
-              </div>
-            </button>
-          ))}
+      {offensive.length > 0 && (
+        <div className="scenario-category">
+          <h4 className="scenario-cat-title scenario-cat-offensive">
+            🔴 Offensive — "What if an attacker gains…"
+          </h4>
+          <div className="scenario-buttons">
+            {offensive.map(([id, p]) => (
+              <button
+                key={id}
+                className={`btn-scenario btn-scenario--offensive ${activeId === id ? 'btn-scenario--active' : ''}`}
+                onClick={() => runScenario(id, p.label, p.mutations)}
+                disabled={loading}
+                title={p.description}
+              >
+                <span className="scenario-btn-id">{id}</span>
+                <div className="scenario-btn-content">
+                  <span className="scenario-btn-title">{p.label}</span>
+                  <small className="scenario-btn-path">{p.description}</small>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Defensive scenarios ──────────────────────────────────────── */}
-      <div className="scenario-category">
-        <h4 className="scenario-cat-title scenario-cat-defensive">
-          🟢 Defensive — "What if we remediate…"
-        </h4>
-        <div className="scenario-buttons">
-          {defensive.map((s) => (
-            <button
-              key={s.id}
-              className={`btn-scenario btn-scenario--defensive ${activeScenarioDef?.id === s.id ? 'btn-scenario--active' : ''}`}
-              onClick={() => runScenario(s.id, s.label, s.mutations)}
-              disabled={loading}
-              title={s.detail}
-            >
-              <span className="scenario-btn-id">{s.id}</span>
-              <div className="scenario-btn-content">
-                <span className="scenario-btn-title">{s.label}</span>
-                <small className="scenario-btn-path">{s.desc}</small>
-              </div>
-            </button>
-          ))}
+      {defensive.length > 0 && (
+        <div className="scenario-category">
+          <h4 className="scenario-cat-title scenario-cat-defensive">
+            🟢 Defensive — "What if we remediate…"
+          </h4>
+          <div className="scenario-buttons">
+            {defensive.map(([id, p]) => (
+              <button
+                key={id}
+                className={`btn-scenario btn-scenario--defensive ${activeId === id ? 'btn-scenario--active' : ''}`}
+                onClick={() => runScenario(id, p.label, p.mutations)}
+                disabled={loading}
+                title={p.description}
+              >
+                <span className="scenario-btn-id">{id}</span>
+                <div className="scenario-btn-content">
+                  <span className="scenario-btn-title">{p.label}</span>
+                  <small className="scenario-btn-path">{p.description}</small>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Detailed Results ─────────────────────────────────────────── */}
       {scenario && (
-        <div className={`scenario-result ${activeScenarioDef?.category === 'offensive' ? 'scenario-result--offensive' : 'scenario-result--defensive'}`}>
+        <div className={`scenario-result ${isActiveOffensive ? 'scenario-result--offensive' : 'scenario-result--defensive'}`}>
           <div className="scenario-result-header">
             <h4>{scenarioLabel}</h4>
             {(() => {
-              const isOff = activeScenarioDef?.category === 'offensive';
-              const badge = impactBadge(scenario.delta.riskReductionPercent, isOff || false);
+              const badge = impactBadge(scenario.delta.riskReductionPercent, isActiveOffensive);
               return <span className={`impact-badge ${badge.cls}`}>{badge.label}</span>;
             })()}
           </div>
@@ -206,9 +140,9 @@ export default function ScenarioPanel() {
           )}
 
           {/* Mutation info */}
-          {activeScenarioDef && (
+          {activePreset && (
             <div className="scenario-mutation-info">
-              {activeScenarioDef.mutations.map((m, i) => (
+              {activePreset.mutations.map((m: any, i: number) => (
                 <span key={i} className={`mutation-chip mutation-chip--${m.type}`}>
                   {m.type === 'addEdge' && `+ ${m.source} → ${m.relation} → ${m.target}`}
                   {m.type === 'removeEdge' && `− Remove edge ${m.edgeId}`}

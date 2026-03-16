@@ -10,6 +10,7 @@ interface IconNodeData {
   animActive?: boolean;
   isCluster?: boolean;
   subnetId?: string;
+  privilegeLevel?: string;
 }
 
 /* ── SVG Icons ─────────────────────────────────────────────────────── */
@@ -70,8 +71,8 @@ const DomainControllerIcon = () => (
   </svg>
 );
 
-function getIcon(nodeType: string, highValue: boolean, label: string) {
-  if (label === 'DC01') return <DomainControllerIcon />;
+function getIcon(nodeType: string, highValue: boolean, privilegeLevel?: string) {
+  if (privilegeLevel === 'Domain Controller') return <DomainControllerIcon />;
   if (highValue && nodeType === 'User') return <AdminIcon />;
   if (highValue) return <ShieldIcon />;
   switch (nodeType) {
@@ -79,6 +80,7 @@ function getIcon(nodeType: string, highValue: boolean, label: string) {
     case 'Group': return <GroupIcon />;
     case 'Server': return <ServerIcon />;
     case 'Computer': return <ComputerIcon />;
+    case 'Subnet': return <GroupIcon />;
     default: return <ServerIcon />;
   }
 }
@@ -108,7 +110,7 @@ export default function IconNode({ data }: { data: IconNodeData }) {
       <Handle type="target" position={Position.Left} className="icon-handle" />
       <Handle type="target" position={Position.Top} className="icon-handle" id="t-top" />
       <div className="icon-node__icon">
-        {getIcon(data.nodeType, data.highValue, data.label)}
+        {getIcon(data.nodeType, data.highValue, data.privilegeLevel)}
       </div>
       <div className="icon-node__label">{data.label}</div>
       {data.highValue && <div className="icon-node__badge">HVT</div>}

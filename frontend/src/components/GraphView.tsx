@@ -17,42 +17,111 @@ import 'reactflow/dist/style.css';
 import { useStore } from '../store';
 import IconNode from './IconNode';
 
-/* ── Hand-tuned topology layout — minimises edge crossings ────────── */
-const NODE_WIDTH = 190;
-const NODE_HEIGHT = 78;
+/* ── Automatic tier + subnet layout ─────────────────────────────── */
+const H_GAP = 250; // horizontal spacing between node centres
+const V_GAP = 200; // vertical spacing between tiers
 
-/*
- * Manually positioned to reduce edge intersections.
- * DC01 at the top (crown jewel), privilege tiers flow downward,
- * Arselan centred (most connections), Mudrek at bottom (lowest priv).
+/**
+ * Assign a vertical tier to a node based on its role.
+ *   0 → Domain Controllers  (crown jewels, topmost)
+ *   1 → High-value groups / Domain-Admin-level nodes
+ *   2 → Regular groups, computers, servers
+ *   3 → Users  (bottom)
  */
-const POSITION_MAP: Record<string, { x: number; y: number }> = {
-  DC01:          { x: 750,  y: 80  },   // top — Domain Controller
-  DomainAdmins:  { x: 380,  y: 260 },   // upper-left
-  Sultan:        { x: 1100, y: 260 },   // upper-right
-  Mutaz:         { x: 180,  y: 480 },   // left-centre
-  ServerAdmins:  { x: 430,  y: 680 },   // centre-left lower
-  FileServer:    { x: 130,  y: 820 },   // far lower-left
-  Arselan:       { x: 780,  y: 560 },   // centre (hub node)
-  HelpDesk:      { x: 480,  y: 930 },   // lower centre-left
-  Workstation01: { x: 1150, y: 780 },   // lower-right
-  Mudrek:        { x: 960,  y: 1080 },  // bottom — lowest privilege
-};
+function getNodeTier(data: any): number {
+  const priv = (data.privilegeLevel || '').toLowerCase();
+  const type = (data.nodeType || '').toLowerCase();
+  if (priv === 'domain controller') return 0;
+  if (data.highValue && (type === 'group' || type === 'server')) return 1;
+  if (type === 'group' || type === 'computer' || type === 'server') return 2;
+  return 3; // User
+}
 
-function layoutGraph(
-  rawNodes: Node[],
-  rawEdges: Edge[],
-): { nodes: Node[]; edges: Edge[] } {
-  const nodes = rawNodes.map((n) => {
-    const pos = POSITION_MAP[n.id];
-    if (pos) {
-      return { ...n, position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 } };
-    }
-    // Fallback for unknown nodes — place them to the right
-    return { ...n, position: { x: 1300, y: 500 } };
+function layoutGraph(rawNodes: Node[], rawEdges: Edge[]): { nodes: Node[]; edges: Edge[] } {
+  if (rawNodes.length === 0) return { nodes: rawNodes, edges: rawEdges };
+
+  /* ── Cluster mode: just spread cluster nodes in a row ─────────── */
+  const clusterNodes = rawNodes.filter((n) => n.data?.isCluster);
+  if (clusterNodes.length > 0) {
+    const nonCluster = rawNodes.filter((n) => !n.data?.isCluster);
+    const placed: Node[] = clusterNodes.map((n, i) => ({
+      ...n,
+      position: { x: i * 520, y: 60 },
+    }));
+    // Expanded nodes below their cluster
+    nonCluster.forEach((n, i) => {
+      placed.push({ ...n, position: { x: i * H_GAP, y: 320 } });
+    });
+    return { nodes: placed, edges: rawEdges };
+  }
+
+  /* ── Normal mode ──────────────────────────────────────────────── */
+  // Split by whether the node belongs to a subnet
+  const subnetNodes = rawNodes.filter((n) => n.data?.subnet);
+  const userNodes   = rawNodes.filter((n) => !n.data?.subnet);
+
+  // Group subnet nodes → subnet → tier → [nodes]
+  const subnetTierMap: Record<string, Record<number, Node[]>> = {};
+  subnetNodes.forEach((n) => {
+    const s = n.data.subnet as string;
+    const t = getNodeTier(n.data);
+    if (!subnetTierMap[s]) subnetTierMap[s] = {};
+    if (!subnetTierMap[s][t]) subnetTierMap[s][t] = [];
+    subnetTierMap[s][t].push(n);
   });
 
-  return { nodes, edges: rawEdges };
+  const subnetIds = Object.keys(subnetTierMap).sort();
+
+  // Per-subnet zone width = (max nodes in any tier) * H_GAP
+  const ZONE_SEP = 180;
+  const zoneWidths = subnetIds.map((sid) => {
+    const maxPerTier = Math.max(...Object.values(subnetTierMap[sid]).map((a) => a.length));
+    return Math.max(maxPerTier * H_GAP, H_GAP);
+  });
+
+  // Cumulative x offsets for each zone
+  const zoneStartX: number[] = [];
+  let cx = 0;
+  zoneWidths.forEach((w) => { zoneStartX.push(cx); cx += w + ZONE_SEP; });
+  const totalZoneWidth = cx - ZONE_SEP;
+
+  const placed: Node[] = [];
+
+  // Layout each subnet zone
+  subnetIds.forEach((sid, zi) => {
+    const tierMap = subnetTierMap[sid];
+    const tierKeys = Object.keys(tierMap).map(Number).sort();
+    const zoneW   = zoneWidths[zi];
+    const zoneX   = zoneStartX[zi];
+
+    tierKeys.forEach((tier, ti) => {
+      const tierNodes = tierMap[tier];
+      const rowW = (tierNodes.length - 1) * H_GAP;
+      const rowX = zoneX + (zoneW - rowW) / 2;
+      tierNodes.forEach((n, i) => {
+        placed.push({ ...n, position: { x: rowX + i * H_GAP, y: ti * V_GAP + 60 } });
+      });
+    });
+  });
+
+  // Layout users in a grid below the subnet zones
+  const maxTiers = Math.max(...subnetIds.map((sid) => Object.keys(subnetTierMap[sid]).length), 0);
+  const usersTopY = maxTiers * V_GAP + V_GAP + 80;
+
+  const USERS_PER_ROW = Math.min(8, userNodes.length);
+  const userRowW  = (USERS_PER_ROW - 1) * H_GAP;
+  const userStartX = Math.max(0, (totalZoneWidth - userRowW) / 2);
+
+  userNodes.forEach((n, i) => {
+    const row = Math.floor(i / USERS_PER_ROW);
+    const col = i % USERS_PER_ROW;
+    placed.push({
+      ...n,
+      position: { x: userStartX + col * H_GAP, y: usersTopY + row * 160 },
+    });
+  });
+
+  return { nodes: placed, edges: rawEdges };
 }
 
 /* ── Custom node types ───────────────────────────────────────────────── */
@@ -229,6 +298,8 @@ export default function GraphView() {
               highValue: n.highValue,
               highlighted: hlNodes.has(n.name),
               animActive: n.name === animActiveNode,
+              subnet: n.subnet || '',
+              privilegeLevel: n.privilegeLevel || '',
             },
             position: { x: 0, y: 0 },
           });
@@ -263,6 +334,8 @@ export default function GraphView() {
           highValue: n.highValue,
           highlighted: hlNodes.has(n.name),
           animActive: n.name === animActiveNode,
+          subnet: '',
+          privilegeLevel: n.privilegeLevel || '',
         },
         position: { x: 0, y: 0 },
       });
@@ -334,6 +407,8 @@ export default function GraphView() {
         highValue: n.highValue,
         highlighted: hasHL ? hlNodes.has(n.name) : false,
         animActive: n.name === animActiveNode,
+        subnet: n.subnet || '',
+        privilegeLevel: n.privilegeLevel || '',
       },
       position: { x: 0, y: 0 },
     }));

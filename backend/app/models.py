@@ -31,9 +31,9 @@ class GraphResponse(BaseModel):
 # ── Analysis ────────────────────────────────────────────────────────────────
 class AnalysisRequest(BaseModel):
     startNodes: list[str]
-    targetNode: str = "DC01"
-    minDepth: int = 4
-    maxDepth: int = 7
+    targetNode: str = "kingslanding"
+    minDepth: int = 3
+    maxDepth: int = 10
     k: int = 50
 
 

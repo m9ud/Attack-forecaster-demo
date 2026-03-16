@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════
-   Attack Path Forecaster — BloodHound-Style Dark Theme
+   Attack Path Forecaster -Style Dark Theme
    ════════════════════════════════════════════════════════════════════════ */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -55,15 +55,17 @@ body {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   z-index: 100;
+  box-shadow: 0 1px 0 rgba(97,220,163,0.07), var(--shadow-sm);
 }
 .topbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.topbar-logo {
-  font-size: 20px;
-  filter: saturate(1.5);
+.topbar-logo-icon {
+  color: #61dca3;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(97,220,163,0.55));
 }
 .topbar-title {
   font-size: 15px;
@@ -76,9 +78,10 @@ body {
   padding: 3px 10px;
   border-radius: 20px;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text2);
   border: 1px solid var(--border);
   letter-spacing: 0.3px;
+  font-weight: 500;
 }
 .topbar-right {
   display: flex;
@@ -86,6 +89,9 @@ body {
   gap: 10px;
 }
 .topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 6px;
@@ -116,12 +122,22 @@ body {
   color: var(--text);
 }
 .topbar-btn.active {
-  background: rgba(74,144,217,.12);
+  background: rgba(74,144,217,.14);
   color: var(--accent);
-  border-color: rgba(74,144,217,.3);
+  border-color: rgba(74,144,217,.35);
+  box-shadow: 0 0 10px rgba(74,144,217,.15);
 }
 
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+@keyframes spin   { to { transform: rotate(360deg); } }
+
+.spin-icon { animation: spin 1.2s linear infinite; }
+
+/* Landing brand icon */
+.landing-brand-icon {
+  color: #61dca3;
+  filter: drop-shadow(0 0 8px rgba(97, 220, 163, 0.7));
+}
 
 /* ── Workspace ──────────────────────────────────────────────────────── */
 .workspace {
@@ -166,8 +182,12 @@ body {
 }
 .sidebar-tab {
   flex: 1;
-  padding: 10px 8px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 4px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--muted);
   background: transparent;
@@ -192,9 +212,9 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
 }
-.sidebar-content::-webkit-scrollbar { width: 5px; }
+.sidebar-content::-webkit-scrollbar { width: 4px; }
 .sidebar-content::-webkit-scrollbar-track { background: transparent; }
-.sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.sidebar-content::-webkit-scrollbar-thumb { background: var(--border-hl); border-radius: 4px; }
 
 /* ── Graph Container ────────────────────────────────────────────────── */
 .graph-container {
@@ -382,7 +402,7 @@ body {
 }
 .icon-node:hover {
   border-color: rgba(255,255,255,.25);
-  transform: scale(1.04);
+  transform: scale(1.06);
   box-shadow: var(--shadow);
 }
 .icon-node__icon {
@@ -441,8 +461,8 @@ body {
 
 /* ── High Value Target ──────────────────────────────────────────────── */
 .icon-node--hv {
-  border-color: rgba(239,68,68,.4);
-  box-shadow: 0 0 16px rgba(239,68,68,.25);
+  border-color: rgba(239,68,68,.5) !important;
+  box-shadow: 0 0 18px rgba(239,68,68,.3), inset 0 0 8px rgba(239,68,68,.08);
 }
 
 /* ── Animations ─────────────────────────────────────────────────────── */
@@ -451,8 +471,8 @@ body {
   50%      { box-shadow: 0 0 20px rgba(255,107,0,.6), 0 0 40px rgba(255,107,0,.3); }
 }
 @keyframes badge-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.12); }
+  0%, 100% { transform: scale(1); box-shadow: 0 1px 4px rgba(239,68,68,.5); }
+  50%       { transform: scale(1.15); box-shadow: 0 2px 10px rgba(239,68,68,.8); }
 }
 .react-flow__edge.animated path {
   stroke-dasharray: 8 4;
@@ -474,6 +494,17 @@ body {
   letter-spacing: 1px;
   color: var(--muted);
   font-weight: 600;
+}
+.panel h3::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 11px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin-right: 8px;
+  vertical-align: middle;
+  opacity: 0.7;
 }
 .panel h4 {
   font-size: 12px;
@@ -550,6 +581,13 @@ body {
 }
 .btn-primary:active {
   transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  filter: grayscale(0.3);
 }
 
 .btn-sm {
@@ -757,6 +795,14 @@ body {
 }
 .scenario-cat-offensive { color: #ef4444; }
 .scenario-cat-defensive { color: #22c55e; }
+
+.scenario-empty {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 20px 0;
+  opacity: 0.7;
+}
 
 /* ── Scenario Results — Enhanced Diff ───────────────────────────────── */
 .scenario-result {
@@ -1542,9 +1588,11 @@ body {
 }
 
 .dataset-dropzone-icon {
-  font-size: 24px;
   color: var(--accent);
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dataset-dropzone-content strong {
@@ -1557,8 +1605,17 @@ body {
   opacity: .7;
 }
 
+.dataset-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .dataset-reset-btn {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 7px 12px;
   font-size: 11px;
   border: 1px solid var(--border);
@@ -1580,61 +1637,113 @@ body {
   cursor: not-allowed;
 }
 
+.dataset-download-btn {
+  border-color: rgba(97, 220, 163, 0.25);
+  color: #61dca3;
+}
+
+.dataset-download-btn:hover {
+  background: rgba(97, 220, 163, 0.08);
+  border-color: #61dca3;
+  color: #61dca3;
+}
+
 /* ══════════════════════════════════════════════════════════════════════
-   Landing Page — shown before any dataset is loaded
+   Landing Page — LetterGlitch fullscreen with glassmorphism card
    ══════════════════════════════════════════════════════════════════════ */
 
-.landing {
+.landing-fullscreen {
   flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
   padding: 32px;
+  z-index: 10;
 }
 
-.landing-card {
-  max-width: 480px;
+.landing-glass-card {
+  max-width: 500px;
   width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 40px 32px;
+  background: rgba(15, 17, 23, 0.72);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(97, 220, 163, 0.18);
+  border-radius: 16px;
+  padding: 44px 36px;
   text-align: center;
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 0 0 1px rgba(97, 220, 163, 0.06),
+    0 24px 64px rgba(0, 0, 0, 0.7),
+    0 0 80px rgba(97, 220, 163, 0.05);
 }
 
-.landing-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  line-height: 1;
+.landing-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.landing-brand-icon {
+  font-size: 22px;
+  filter: drop-shadow(0 0 8px rgba(97, 220, 163, 0.7));
+}
+
+.landing-brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #61dca3;
+  text-transform: uppercase;
+  text-shadow: 0 0 20px rgba(97, 220, 163, 0.5);
 }
 
 .landing-heading {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 800;
   color: var(--text);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+  letter-spacing: -0.8px;
 }
 
 .landing-subtext {
   font-size: 13px;
   color: var(--muted);
-  line-height: 1.5;
-  margin: 0 0 24px;
+  line-height: 1.6;
+  margin: 0 0 28px;
 }
 
-.landing .dataset-upload {
+.landing-glass-card .dataset-upload {
   border-bottom: none;
   margin-bottom: 0;
   padding: 0;
 }
 
-.landing .dataset-dropzone {
+.landing-glass-card .dataset-dropzone {
   padding: 28px 16px;
   border-width: 2px;
+  border-color: rgba(97, 220, 163, 0.2);
+  background: rgba(97, 220, 163, 0.03);
 }
 
-.landing .dataset-dropzone-icon {
+.landing-glass-card .dataset-dropzone:hover {
+  border-color: #61dca3;
+  background: rgba(97, 220, 163, 0.07);
+}
+
+.landing-glass-card .dataset-dropzone-icon {
   font-size: 32px;
+  color: #61dca3;
+}
+
+.landing-glass-card .dataset-dropzone-content strong {
+  color: #61dca3;
 }
