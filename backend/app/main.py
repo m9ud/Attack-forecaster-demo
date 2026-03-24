@@ -19,10 +19,16 @@ from .models import (
     SimulateRequest, SimulateResponse,
     AnalysisSummary, DeltaInfo,
     NeighborRequest, NeighborResponse,
+    CriticalNode, MitigationSuggestion,
+    MitigationsRequest, ExportRequest,
+    ReportRequest, ROIItem, TimelinePoint,
 )
 from . import dataset as ds
 from .graph_engine import GraphEngine
 from .explainer import explain_path
+from . import mitre_mapping as mitre
+from . import report_generator as report_gen
+from . import threat_intel as ti
 
 app = FastAPI(title="Attack Path Forecaster", version="1.0.0")
 
@@ -177,21 +183,35 @@ def get_scenarios():
 @app.post("/upload-dataset")
 async def upload_dataset(file: UploadFile = File(...)):
     """
-    Upload a JSON dataset to replace the active graph.
-    Validates the JSON schema, swaps the dataset, and rebuilds the engine.
+    Upload a JSON or SharpHound ZIP dataset to replace the active graph.
+    Accepts:
+      - Native app JSON (nodes/edges format)
+      - BloodHound single-type JSON (users.json, groups.json, etc.)
+      - SharpHound ZIP export (contains multiple per-type JSON files)
     """
     global engine, _last_analysis
 
-    # Read and parse
     try:
         content = await file.read()
-        raw = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(400, f"Invalid JSON: {exc}")
     except Exception as exc:
         raise HTTPException(400, f"Could not read file: {exc}")
 
-    # Validate
+    # ── Detect and parse ────────────────────────────────────────────────
+    try:
+        if ds.is_sharphound_zip(content):
+            # SharpHound / BloodHound ZIP export
+            raw = ds.convert_sharphound_zip(content)
+        else:
+            raw = json.loads(content)
+            # Single-type BloodHound JSON (e.g. users.json exported individually)
+            if ds.is_bloodhound_json(raw):
+                raw = ds.convert_bloodhound_json(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"Invalid JSON: {exc}")
+    except Exception as exc:
+        raise HTTPException(400, f"Could not parse file: {exc}")
+
+    # Validate (skip for converted BloodHound data — already normalised)
     errors = ds.validate_dataset(raw)
     if errors:
         raise HTTPException(422, detail={"validationErrors": errors})
@@ -248,3 +268,239 @@ def download_sample_dataset(filename: str):
     if not str(path).startswith(str(_DATA_DIR)) or not path.exists():
         raise HTTPException(404, "Dataset not found")
     return FileResponse(path, media_type="application/json", filename=filename)
+
+
+# ── Advanced analytics endpoints ─────────────────────────────────────────────
+
+@app.post("/critical-nodes", response_model=list[CriticalNode])
+def critical_nodes(req: AnalysisRequest):
+    """
+    Return nodes ranked by betweenness centrality + path traversal frequency.
+    Identifies chokepoints whose removal would most reduce attack surface.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    nodes = engine.compute_critical_nodes(result["paths"])
+    return nodes
+
+
+@app.post("/mitigations", response_model=list[MitigationSuggestion])
+def mitigations(req: AnalysisRequest):
+    """
+    Run analysis and return rule-based mitigation suggestions ranked by priority.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    suggestions = engine.generate_mitigations(result["paths"], result["criticalEdges"])
+    return suggestions
+
+
+@app.post("/export")
+def export_analysis(req: AnalysisRequest):
+    """
+    Run analysis and return a structured JSON report suitable for download.
+    Includes all paths, risk scores, critical edges, mitigations, and metadata.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    mitigations_list = engine.generate_mitigations(result["paths"], result["criticalEdges"])
+    critical_nodes_list = engine.compute_critical_nodes(result["paths"])
+
+    return {
+        "reportVersion": "2.0",
+        "generatedAt": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "dataset": {
+            "nodes": len(ds.NODES),
+            "edges": len(ds.EDGES),
+            "subnets": len(ds.SUBNETS),
+        },
+        "analysisParams": {
+            "startNodes": req.startNodes,
+            "targetNode": req.targetNode,
+            "minDepth": req.minDepth,
+            "maxDepth": req.maxDepth,
+        },
+        "summary": {
+            "totalPaths": result["totalPaths"],
+            "globalRisk": result["globalRisk"],
+            "shortestHops": result["shortestHops"],
+        },
+        "top5Paths": result["top5"],
+        "criticalEdges": result["criticalEdges"],
+        "criticalNodes": critical_nodes_list,
+        "mitigations": mitigations_list,
+        "allPaths": result["paths"],
+    }
+
+
+# ── MITRE ATT&CK endpoints ────────────────────────────────────────────────────
+
+@app.post("/mitre-matrix")
+def mitre_matrix(req: AnalysisRequest):
+    """
+    Run analysis and return MITRE ATT&CK technique coverage + Navigator layer.
+    The navigatorLayer can be imported directly into the ATT&CK Navigator tool.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    techniques = mitre.get_techniques_for_paths(result["paths"])
+    navigator_layer = mitre.build_navigator_layer(
+        result["paths"],
+        dataset_name=f"APF — {req.targetNode}",
+    )
+    # Convert technique dict values to list for frontend
+    technique_list = [
+        {
+            "id": tid,
+            **info,
+        }
+        for tid, info in techniques.items()
+    ]
+    # Sort by severity then usage count
+    sev_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    technique_list.sort(
+        key=lambda x: (sev_order.get(x.get("severity", "Low"), 1), x.get("usageCount", 0)),
+        reverse=True,
+    )
+    return {
+        "techniques": technique_list,
+        "totalTechniques": len(technique_list),
+        "navigatorLayer": navigator_layer,
+        "totalPaths": result["totalPaths"],
+        "globalRisk": result["globalRisk"],
+    }
+
+
+# ── Auto Report Generator ─────────────────────────────────────────────────────
+
+@app.post("/report")
+def generate_report(req: ReportRequest):
+    """
+    Generate a full Markdown or structured JSON report.
+    Includes executive summary, technical findings, MITRE matrix, risk heatmap,
+    and a prioritized remediation roadmap.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.analysis.startNodes, req.analysis.targetNode,
+        req.analysis.minDepth, req.analysis.maxDepth, req.analysis.k,
+    )
+    mitigations_list = engine.generate_mitigations(result["paths"], result["criticalEdges"])
+    dataset_info = {
+        "nodes": len(ds.NODES),
+        "edges": len(ds.EDGES),
+        "subnets": len(ds.SUBNETS),
+    }
+    params = {
+        "startNodes": req.analysis.startNodes,
+        "targetNode": req.analysis.targetNode,
+        "minDepth": req.analysis.minDepth,
+        "maxDepth": req.analysis.maxDepth,
+    }
+
+    if req.format == "json":
+        return {
+            "globalRisk": result["globalRisk"],
+            "totalPaths": result["totalPaths"],
+            "top5": result["top5"],
+            "criticalEdges": result["criticalEdges"],
+            "mitigations": mitigations_list,
+            "datasetInfo": dataset_info,
+            "params": params,
+        }
+
+    markdown = report_gen.generate_full_report(result, mitigations_list, params, dataset_info)
+    return {
+        "markdown": markdown,
+        "generatedAt": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "globalRisk": result["globalRisk"],
+        "totalPaths": result["totalPaths"],
+    }
+
+
+# ── Defense ROI Calculator ────────────────────────────────────────────────────
+
+@app.post("/roi-calculator", response_model=list[ROIItem])
+def roi_calculator(req: AnalysisRequest):
+    """
+    For each critical edge, simulate its removal and calculate:
+    paths eliminated, risk reduction percentage, fix complexity, and ROI score.
+    Returns items sorted by ROI score (best investment first).
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    return engine.compute_defense_roi(result)
+
+
+# ── Threat Intelligence Feed ──────────────────────────────────────────────────
+
+@app.post("/threat-intel")
+def threat_intel_feed(req: AnalysisRequest):
+    """
+    Return CVE/threat intelligence for all nodes appearing in discovered attack paths.
+    Data is sourced from a mock NVD-aligned database keyed by OS/role category.
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    # Collect all nodes appearing in any path
+    nodes_in_paths: set[str] = set()
+    for path in result["paths"]:
+        for node_name in path["nodes"]:
+            nodes_in_paths.add(node_name)
+
+    relevant_nodes = [n for n in ds.NODES if n["name"] in nodes_in_paths]
+    intel = ti.get_threat_intel(relevant_nodes)
+
+    # Convert to list format for frontend
+    intel_list = [
+        {"nodeName": name, **data}
+        for name, data in intel.items()
+    ]
+    intel_list.sort(key=lambda x: x.get("criticalCount", 0) + x.get("highCount", 0), reverse=True)
+
+    return {
+        "items": intel_list,
+        "totalNodes": len(intel_list),
+        "totalCVEs": sum(x.get("totalCVEs", 0) for x in intel_list),
+        "exploitableCount": sum(x.get("exploitableCount", 0) for x in intel_list),
+    }
+
+
+# ── What-If Time Machine ──────────────────────────────────────────────────────
+
+@app.post("/timeline", response_model=list[TimelinePoint])
+def what_if_timeline(req: AnalysisRequest):
+    """
+    Progressive simulation showing risk reduction as mitigations are applied over time.
+    Returns a series of timeline points (Now → After patches → Full remediation).
+    """
+    _require_dataset()
+    result = engine.analyze(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+    )
+    mitigations_list = engine.generate_mitigations(result["paths"], result["criticalEdges"])
+    timeline = engine.compute_timeline(
+        req.startNodes, req.targetNode,
+        req.minDepth, req.maxDepth, req.k,
+        mitigations_list,
+    )
+    return timeline

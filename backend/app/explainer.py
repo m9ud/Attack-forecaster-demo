@@ -1,9 +1,49 @@
 """
 Explanation Engine — generates human-readable step-by-step attack chain
-reasoning from a discovered path.
+reasoning, including MITRE ATT&CK kill-chain phase classification.
 """
 
-RELATION_DESC = {
+# ── Kill-chain phase per relation ───────────────────────────────────────────
+KILL_CHAIN_PHASE: dict[str, str] = {
+    "MemberOf":           "Reconnaissance",
+    "HasSession":         "Credential Access",
+    "CanRDP":             "Lateral Movement",
+    "AdminTo":            "Privilege Escalation",
+    "WriteDACL":          "Privilege Escalation",
+    "GenericAll":         "Privilege Escalation",
+    "GenericWrite":       "Persistence",
+    "WriteOwner":         "Privilege Escalation",
+    "AddSelf":            "Privilege Escalation",
+    "AddMember":          "Privilege Escalation",
+    "ForceChangePassword":"Credential Access",
+    "DCSync":             "Exfiltration",
+    "ReadLAPSPassword":   "Credential Access",
+    "AllExtendedRights":  "Privilege Escalation",
+    "Owns":               "Privilege Escalation",
+    "SQLAdmin":           "Execution",
+}
+
+# ── MITRE ATT&CK technique IDs ─────────────────────────────────────────────
+MITRE_TECHNIQUE: dict[str, str] = {
+    "HasSession":         "T1003 (Credential Dumping)",
+    "CanRDP":             "T1021.001 (Remote Desktop Protocol)",
+    "AdminTo":            "T1078 (Valid Accounts — Admin)",
+    "WriteDACL":          "T1222 (File & Directory Permissions Modification)",
+    "GenericAll":         "T1078 (Valid Accounts — Full Control)",
+    "GenericWrite":       "T1098 (Account Manipulation)",
+    "WriteOwner":         "T1222 (Permissions Modification)",
+    "AddSelf":            "T1098 (Account Manipulation)",
+    "AddMember":          "T1098 (Account Manipulation)",
+    "ForceChangePassword":"T1098.001 (Account Manipulation — Password)",
+    "DCSync":             "T1003.006 (DCSync)",
+    "ReadLAPSPassword":   "T1552 (Unsecured Credentials — LAPS)",
+    "AllExtendedRights":  "T1078 (Valid Accounts)",
+    "DCSync":             "T1003.006 (OS Credential Dumping — DCSync)",
+    "SQLAdmin":           "T1059 (Command and Scripting Interpreter — SQL)",
+    "MemberOf":           "T1069 (Permission Groups Discovery)",
+}
+
+RELATION_DESC: dict[str, str] = {
     "WriteDACL": (
         "has WriteDACL on {target}\n"
         "  → Can modify the Discretionary Access Control List\n"
@@ -67,68 +107,122 @@ RELATION_DESC = {
         "  → Can execute commands via xp_cmdshell\n"
         "  → Gains OS-level code execution on the server"
     ),
+    "ReadLAPSPassword": (
+        "can read LAPS password on {target}\n"
+        "  → Retrieves the local administrator password in plaintext\n"
+        "  → Gains local admin access to the machine"
+    ),
+    "AllExtendedRights": (
+        "has AllExtendedRights on {target}\n"
+        "  → Can perform sensitive operations (ForceChangePassword, ReadLAPSPassword)\n"
+        "  → Effective full control over the object"
+    ),
+    "Owns": (
+        "Owns {target}\n"
+        "  → As owner, can modify the object's DACL\n"
+        "  → Effectively equivalent to WriteDACL"
+    ),
 }
 
-PRIV_GAIN = {
-    "WriteDACL": "ACL control over {target}",
-    "GenericAll": "Full control of {target}",
-    "AdminTo": "Local admin on {target}",
-    "HasSession": "Credentials of {target}",
-    "CanRDP": "Interactive session on {target}",
-    "MemberOf": "Group membership in {target}",
-    "GenericWrite": "Write access on {target}",
-    "WriteOwner": "Ownership of {target}",
-    "AddSelf": "Self-added membership in {target}",
-    "AddMember": "Can add members to {target}",
-    "ForceChangePassword": "Account takeover of {target}",
-    "DCSync": "All password hashes from {target}",
-    "SQLAdmin": "OS-level execution on {target}",
+PRIV_GAIN: dict[str, str] = {
+    "WriteDACL":          "ACL control over {target}",
+    "GenericAll":         "Full control of {target}",
+    "AdminTo":            "Local admin on {target}",
+    "HasSession":         "Credentials of {target}",
+    "CanRDP":             "Interactive session on {target}",
+    "MemberOf":           "Group membership in {target}",
+    "GenericWrite":       "Write access on {target}",
+    "WriteOwner":         "Ownership of {target}",
+    "AddSelf":            "Self-added membership in {target}",
+    "AddMember":          "Can add members to {target}",
+    "ForceChangePassword":"Account takeover of {target}",
+    "DCSync":             "All password hashes from {target}",
+    "SQLAdmin":           "OS-level execution on {target}",
+    "ReadLAPSPassword":   "Local admin password for {target}",
+    "AllExtendedRights":  "Extended privileges over {target}",
+    "Owns":               "Ownership → WriteDACL on {target}",
+}
+
+# Phase emoji for readable output
+_PHASE_ICON = {
+    "Reconnaissance":      "🔍",
+    "Credential Access":   "🔑",
+    "Lateral Movement":    "↔️",
+    "Privilege Escalation":"⬆️",
+    "Persistence":         "📌",
+    "Execution":           "⚙️",
+    "Exfiltration":        "📤",
 }
 
 
 def explain_path(path_info: dict) -> str:
     """Return multi-line explanation text for one attack path."""
     edges = path_info["edges"]
+    exploit_ease = path_info.get("exploitEase", None)
+    stealth = path_info.get("stealthFactor", None)
+
     lines: list[str] = [
         f"═══ Attack Chain: {path_info['pathId']} ═══",
-        f"Risk Score: {path_info['risk']}  |  Normalized: {path_info.get('normalizedScore', 'N/A')}/100",
-        f"Impact: {path_info.get('impactEstimation', 'Unknown')}  |  Hops: {path_info['hops']}",
-        f"Through Critical Edge: {'Yes ★' if path_info['throughCritical'] else 'No'}",
-        "",
+        f"Risk Score   : {path_info['risk']}",
+        f"Normalized   : {path_info.get('normalizedScore', 'N/A')}/100",
+        f"Impact       : {path_info.get('impactEstimation', 'Unknown')}",
+        f"Hops         : {path_info['hops']}",
     ]
 
+    if exploit_ease is not None:
+        lines.append(f"Exploit Ease : {exploit_ease:.0%}  (1.0 = trivially easy)")
+    if stealth is not None:
+        lines.append(f"Stealth      : {stealth:.0%}  (1.0 = completely invisible)")
+
+    lines.append(f"Critical Edge: {'Yes ★' if path_info['throughCritical'] else 'No'}")
+    lines.append("")
+
+    last_phase = None
     for i, edge in enumerate(edges):
         step = i + 1
         rel = edge["relation"]
         src = edge["source"]
         tgt = edge["target"]
+
+        phase = KILL_CHAIN_PHASE.get(rel, "Unknown")
+        phase_icon = _PHASE_ICON.get(phase, "◆")
+        mitre = MITRE_TECHNIQUE.get(rel, "")
+
+        # Print phase header when it changes
+        if phase != last_phase:
+            lines.append(f"── {phase_icon} {phase.upper()} ──")
+            last_phase = phase
+
         desc = RELATION_DESC.get(rel, f"connects to {tgt} via {rel}")
         desc = desc.format(source=src, target=tgt)
         priv = PRIV_GAIN.get(rel, f"Access to {tgt}").format(source=src, target=tgt)
 
         lines.append(f"STEP {step}: {src}")
         lines.append(f"  │ {desc}")
-        lines.append(f"  │ Privilege gained: {priv}")
+        lines.append(f"  │ Privilege gained : {priv}")
+        if mitre:
+            lines.append(f"  │ MITRE ATT&CK    : {mitre}")
 
         if step < len(edges):
             lines.append("  ▼")
         else:
             lines.append("  ▼")
-            lines.append(f"RESULT: {tgt} — Target Reached")
+            lines.append(f"RESULT: {tgt} — Target Compromised ★")
 
     lines.append("")
     lines.append("── Risk Breakdown ──")
     cumulative = 0
     for i, edge in enumerate(edges):
         cumulative += edge["weight"]
+        ease = KILL_CHAIN_PHASE.get(edge["relation"], "?")
         lines.append(
-            f"  Step {i + 1}: [{edge['edgeId']}] {edge['relation']}"
-            f"  (weight={edge['weight']}, cumulative={cumulative})"
+            f"  Step {i+1}: [{edge['edgeId']}] {edge['relation']}"
+            f"  weight={edge['weight']}, cumulative={cumulative}"
+            f"  | phase: {ease}"
         )
 
-    from math import sqrt
     lines.append(
-        f"  Total: {path_info['sumWeights']} / √{path_info['hops']}"
-        f" = {path_info['risk']}"
+        f"  Total weight: {path_info['sumWeights']} hops: {path_info['hops']}"
+        f"  → Risk: {path_info['risk']}"
     )
     return "\n".join(lines)

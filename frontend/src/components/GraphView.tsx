@@ -176,6 +176,9 @@ export default function GraphView() {
   const focusEdges = useStore((s: any) => s.focusEdges);
   const setFocusNode = useStore((s: any) => s.setFocusNode);
 
+  /* Path isolation */
+  const isolateSelectedPath = useStore((s: any) => s.isolateSelectedPath);
+
   /* Animation */
   const animatingPathId = useStore((s: any) => s.animatingPathId);
   const animationStep = useStore((s: any) => s.animationStep);
@@ -190,6 +193,15 @@ export default function GraphView() {
 
   /* ── Apply node filters ────────────────────────────────────────────── */
   const filteredNodes = useMemo(() => {
+    // Path isolation: show ONLY the selected path's nodes, nothing else
+    if (isolateSelectedPath && selectedPathId && analysis) {
+      const path = analysis.paths.find((p: any) => p.pathId === selectedPathId);
+      if (path) {
+        const pathNodeSet = new Set<string>(path.nodes);
+        return activeNodes.filter((n: any) => pathNodeSet.has(n.name));
+      }
+    }
+
     let nodes = activeNodes;
 
     if (nodeFilters.highValueOnly) {
@@ -208,10 +220,19 @@ export default function GraphView() {
     }
 
     return nodes;
-  }, [activeNodes, nodeFilters, analysis]);
+  }, [activeNodes, nodeFilters, analysis, isolateSelectedPath, selectedPathId]);
 
   /* ── Apply edge filters ────────────────────────────────────────────── */
   const filteredEdges = useMemo(() => {
+    // Path isolation: show ONLY edges belonging to the selected path
+    if (isolateSelectedPath && selectedPathId && analysis) {
+      const path = analysis.paths.find((p: any) => p.pathId === selectedPathId);
+      if (path) {
+        const pathEdgeSet = new Set<string>(path.edges.map((e: any) => e.edgeId));
+        return activeEdges.filter((e: any) => pathEdgeSet.has(e.id));
+      }
+    }
+
     if (edgeFilters.hideAllEdges) return [];
 
     const nodeNames = new Set(filteredNodes.map((n: any) => n.name));
@@ -223,7 +244,7 @@ export default function GraphView() {
     edges = edges.filter((e: any) => e.weight >= edgeFilters.minWeight);
 
     return edges;
-  }, [activeEdges, filteredNodes, edgeFilters]);
+  }, [activeEdges, filteredNodes, edgeFilters, isolateSelectedPath, selectedPathId, analysis]);
 
   /* ── Build highlighted sets ────────────────────────────────────────── */
   const { hlNodes, hlEdges, removedEdges, animActiveNode, animActiveEdge } = useMemo(() => {

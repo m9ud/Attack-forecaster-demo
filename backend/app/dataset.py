@@ -8,8 +8,10 @@ via the /upload-dataset endpoint.
 
 from __future__ import annotations
 
+import io
 import json
 import copy
+import zipfile
 from pathlib import Path
 
 # ── Default weight table (used when edges don't carry their own weight) ──
@@ -412,3 +414,347 @@ def validate_dataset(raw: dict) -> list[str]:
                 errors.append(f"Edge {i} ('{e.get('id')}'): target '{e.get('target')}' not found in nodes")
 
     return errors
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  SharpHound / BloodHound Integration
+# ═══════════════════════════════════════════════════════════════════════════
+
+# BloodHound ACE right → our relation name
+_BH_ACE_MAP: dict[str, str] = {
+    "GenericAll":            "GenericAll",
+    "WriteDacl":             "WriteDACL",
+    "WriteDACL":             "WriteDACL",
+    "WriteOwner":            "WriteOwner",
+    "GenericWrite":          "GenericWrite",
+    "ForceChangePassword":   "ForceChangePassword",
+    "AddSelf":               "AddSelf",
+    "AddMember":             "AddMember",
+    "AllExtendedRights":     "AllExtendedRights",
+    "GetChangesAll":         "DCSync",       # DS-Replication-Get-Changes-All
+    "GetChanges":            "DCSync",       # paired with GetChangesAll
+    "DCSync":                "DCSync",
+    "ReadLAPSPassword":      "ReadLAPSPassword",
+    "ReadGMSAPassword":      "ReadLAPSPassword",
+    "Owns":                  "Owns",
+}
+
+# BloodHound v4 recognised meta.type values
+_BH_KNOWN_TYPES = {"users", "groups", "computers", "domains", "gpos", "ous", "containers"}
+
+
+def is_sharphound_zip(content: bytes) -> bool:
+    """ZIP files start with PK magic bytes — SharpHound always produces a ZIP."""
+    return len(content) >= 2 and content[:2] == b"PK"
+
+
+def is_bloodhound_json(raw: dict) -> bool:
+    """
+    Detect a single-file BloodHound JSON (one type per file, with a 'meta' block).
+    BloodHound CE unified files also match here.
+    """
+    meta = raw.get("meta", {})
+    return "data" in raw and meta.get("type") in _BH_KNOWN_TYPES
+
+
+def _bh_clean_name(full: str) -> str:
+    """
+    'MUDREK@CIS.SQU.EDU.OM'  →  'mudrek'
+    'CIS-DC01.CIS.SQU.EDU.OM' → 'cis-dc01'
+    Already clean names are returned lowercased.
+    """
+    return full.split("@")[0].split(".")[0].lower() if full else ""
+
+
+def convert_sharphound_zip(content: bytes) -> dict:
+    """
+    Convert a SharpHound ZIP export (BloodHound v3/v4 format) into our
+    native dataset format.
+
+    SharpHound outputs a .zip containing per-type JSON files:
+      users.json, groups.json, computers.json, domains.json, sessions.json
+    Each file has the shape:
+      { "meta": { "type": "users", ... }, "data": [ <objects> ] }
+    """
+    # ── 1. Extract all JSON files from the ZIP ──────────────────────────
+    type_data: dict[str, list] = {}
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        for entry in zf.namelist():
+            if not entry.lower().endswith(".json"):
+                continue
+            try:
+                with zf.open(entry) as f:
+                    parsed = json.load(f)
+                # Accept both meta.type and filename-based detection
+                meta_type = parsed.get("meta", {}).get("type", "")
+                if not meta_type:
+                    # Guess from filename: "20231015_users.json" → "users"
+                    stem = entry.rsplit("/", 1)[-1].replace(".json", "").lower()
+                    for t in _BH_KNOWN_TYPES:
+                        if t in stem:
+                            meta_type = t
+                            break
+                if meta_type in _BH_KNOWN_TYPES:
+                    type_data[meta_type] = parsed.get("data", [])
+            except Exception:
+                continue  # skip malformed files
+
+    return _convert_bloodhound_type_data(type_data)
+
+
+def convert_bloodhound_json(raw: dict) -> dict:
+    """Convert a single-type BloodHound JSON file into our native format."""
+    meta_type = raw.get("meta", {}).get("type", "")
+    return _convert_bloodhound_type_data({meta_type: raw.get("data", [])})
+
+
+def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
+    """
+    Core converter — works on a dict of { type_name → list_of_objects }.
+    Supports: users, groups, computers, domains.
+    """
+    # ── Pass 1: Build SID → clean_name + SID → object_type maps ────────
+    sid_name: dict[str, str]  = {}   # SID  → 'mudrek'
+    sid_type: dict[str, str]  = {}   # SID  → 'User' | 'Group' | 'Computer'
+
+    _TYPE_MAP = {
+        "users":     "User",
+        "groups":    "Group",
+        "computers": "Computer",
+        "domains":   "Group",   # treat domain objects as groups for edge purposes
+    }
+
+    for type_key, items in type_data.items():
+        node_type = _TYPE_MAP.get(type_key, "")
+        for obj in items:
+            props = obj.get("Properties", {})
+            sid   = props.get("objectid") or obj.get("ObjectIdentifier", "")
+            name  = props.get("name", "")
+            if sid and name:
+                clean = _bh_clean_name(name)
+                sid_name[sid] = clean
+                sid_type[sid] = node_type
+
+    # ── Pass 2: Build nodes ─────────────────────────────────────────────
+    nodes:      list[dict] = []
+    node_set:   set[str]   = set()
+    subnets:    list[dict] = []
+    subnet_set: set[str]   = set()
+
+    # Identify Domain Admin SIDs / group names (for privilege tagging)
+    da_names: set[str] = set()
+    dc_names: set[str] = set()
+
+    for obj in type_data.get("groups", []):
+        props = obj.get("Properties", {})
+        raw_name = props.get("name", "")
+        if "domain admins" in raw_name.lower() or "enterprise admins" in raw_name.lower():
+            da_names.add(_bh_clean_name(raw_name))
+
+    def _add_node(sid: str, name: str, ntype: str, priv: str, hv: bool, subnet: str = "") -> None:
+        if name and name not in node_set:
+            node_set.add(name)
+            nodes.append({
+                "id":             sid[:8] if sid else f"N{len(nodes):04d}",
+                "name":           name,
+                "type":           ntype,
+                "privilegeLevel": priv,
+                "highValue":      hv,
+                "subnet":         subnet,
+            })
+
+    # Users
+    for obj in type_data.get("users", []):
+        props  = obj.get("Properties", {})
+        sid    = props.get("objectid", "")
+        name   = _bh_clean_name(props.get("name", ""))
+        if not name:
+            continue
+        is_da  = props.get("admincount", False)
+        priv   = "Domain Admin" if is_da else "Low"
+        _add_node(sid, name, "User", priv, is_da)
+
+    # Groups
+    for obj in type_data.get("groups", []):
+        props  = obj.get("Properties", {})
+        sid    = props.get("objectid", "")
+        name   = _bh_clean_name(props.get("name", ""))
+        if not name:
+            continue
+        is_priv = name in da_names
+        priv    = "Domain Admin" if is_priv else ""
+        _add_node(sid, name, "Group", priv, is_priv)
+
+    # Computers — detect DCs by name heuristic and domains.json list
+    dc_sids: set[str] = set()
+    for dom in type_data.get("domains", []):
+        for dc_ref in dom.get("Properties", {}).get("DomainControllers", []):
+            if isinstance(dc_ref, str):
+                dc_sids.add(dc_ref)
+
+    # Also collect subnet info from domain objects
+    for dom in type_data.get("domains", []):
+        props = dom.get("Properties", {})
+        dname = props.get("name", "")
+        dname_clean = dname.lower()
+        if dname_clean and dname_clean not in subnet_set:
+            subnet_set.add(dname_clean)
+            subnets.append({
+                "id":    f"subnet-{len(subnets)+1}",
+                "cidr":  f"10.{len(subnets)+1}.0.0/24",
+                "label": dname,
+            })
+
+    subnet_lookup = {s["label"].lower(): s["id"] for s in subnets}
+
+    for obj in type_data.get("computers", []):
+        props  = obj.get("Properties", {})
+        sid    = props.get("objectid", "")
+        name   = _bh_clean_name(props.get("name", ""))
+        if not name:
+            continue
+        is_dc  = (sid in dc_sids) or ("dc" in name and bool(props.get("operatingsystem", "")))
+        priv   = "Domain Controller" if is_dc else ""
+        ntype  = "Server" if is_dc else "Computer"
+        domain = props.get("domain", "").lower()
+        subnet = subnet_lookup.get(domain, "")
+        if is_dc:
+            dc_names.add(name)
+        _add_node(sid, name, ntype, priv, is_dc, subnet)
+
+    # ── Pass 3: Build edges ─────────────────────────────────────────────
+    edges:   list[dict] = []
+    edge_id: int        = 0
+
+    def _eid() -> str:
+        nonlocal edge_id
+        edge_id += 1
+        return f"BH{edge_id:04d}"
+
+    def _add_edge(src: str, tgt: str, relation: str) -> None:
+        if src and tgt and src != tgt and src in node_set and tgt in node_set:
+            edges.append({
+                "id":       _eid(),
+                "source":   src,
+                "target":   tgt,
+                "relation": relation,
+                "weight":   DEFAULT_WEIGHTS.get(relation, 5),
+            })
+
+    def _resolve(sid: str) -> str:
+        return sid_name.get(sid, "")
+
+    # Users → ACEs on users, sessions, primary group
+    for obj in type_data.get("users", []):
+        props   = obj.get("Properties", {})
+        name    = _bh_clean_name(props.get("name", ""))
+        if not name:
+            continue
+        # ACEs: other principals have rights over THIS user
+        for ace in obj.get("Aces", []):
+            src  = _resolve(ace.get("PrincipalSID", ""))
+            rel  = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            if src and rel and not ace.get("IsInherited", False):
+                _add_edge(src, name, rel)
+        # Primary group membership
+        pg_sid = obj.get("PrimaryGroupSid", "")
+        if pg_sid:
+            grp = _resolve(pg_sid)
+            if grp:
+                _add_edge(name, grp, "MemberOf")
+        # AllowedToDelegate
+        for ref in obj.get("AllowedToDelegate", []):
+            tgt = _resolve(ref.get("ObjectIdentifier", ref)) if isinstance(ref, dict) else _resolve(ref)
+            if tgt:
+                _add_edge(name, tgt, "CanRDP")
+
+    # Groups → Members (MemberOf) + ACEs on groups
+    for obj in type_data.get("groups", []):
+        props    = obj.get("Properties", {})
+        grp_name = _bh_clean_name(props.get("name", ""))
+        if not grp_name:
+            continue
+        for member in obj.get("Members", []):
+            src = _resolve(member.get("ObjectIdentifier", ""))
+            if src:
+                _add_edge(src, grp_name, "MemberOf")
+        for ace in obj.get("Aces", []):
+            src = _resolve(ace.get("PrincipalSID", ""))
+            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            if src and rel and not ace.get("IsInherited", False):
+                _add_edge(src, grp_name, rel)
+
+    # Computers → LocalAdmins (AdminTo), RDP users, Sessions, ACEs
+    for obj in type_data.get("computers", []):
+        props      = obj.get("Properties", {})
+        comp_name  = _bh_clean_name(props.get("name", ""))
+        if not comp_name:
+            continue
+
+        for adm in (obj.get("LocalAdmins") or {}).get("Results", []):
+            src = _resolve(adm.get("ObjectIdentifier", ""))
+            if src:
+                _add_edge(src, comp_name, "AdminTo")
+
+        for rdp in (obj.get("RemoteDesktopUsers") or {}).get("Results", []):
+            src = _resolve(rdp.get("ObjectIdentifier", ""))
+            if src:
+                _add_edge(src, comp_name, "CanRDP")
+
+        for sess in (obj.get("Sessions") or {}).get("Results", []):
+            usr = _resolve(sess.get("ObjectIdentifier", ""))
+            if usr:
+                _add_edge(comp_name, usr, "HasSession")
+
+        # Privileged sessions (more reliable than Sessions)
+        for sess in (obj.get("PrivilegedSessions") or {}).get("Results", []):
+            usr = _resolve(sess.get("ObjectIdentifier", ""))
+            if usr:
+                _add_edge(comp_name, usr, "HasSession")
+
+        for ace in obj.get("Aces", []):
+            src = _resolve(ace.get("PrincipalSID", ""))
+            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            if src and rel and not ace.get("IsInherited", False):
+                _add_edge(src, comp_name, rel)
+
+    # Domains → ACEs (DCSync rights usually live here)
+    for obj in type_data.get("domains", []):
+        for ace in obj.get("Aces", []):
+            src = _resolve(ace.get("PrincipalSID", ""))
+            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            if src and rel and not ace.get("IsInherited", False):
+                # Target the DC for domain-level ACEs
+                for dc in dc_names:
+                    _add_edge(src, dc, rel)
+                    break   # one edge per ACE is enough
+
+    # ── Pass 4: Prune orphan edges, build metadata ──────────────────────
+    edges = [e for e in edges if e["source"] in node_set and e["target"] in node_set]
+
+    edge_sources = {e["source"] for e in edges}
+    start_options = [
+        n["name"] for n in nodes
+        if n["type"] == "User"
+        and n["privilegeLevel"] == "Low"
+        and n["name"] in edge_sources
+    ][:4]
+
+    # Critical edge: first DCSync or GenericAll on a DC
+    crit_id = ""
+    for e in edges:
+        if e["relation"] in ("DCSync", "GenericAll") and any(
+            n["name"] == e["target"] and n.get("highValue") for n in nodes
+        ):
+            crit_id = e["id"]
+            break
+
+    return {
+        "weights":         dict(DEFAULT_WEIGHTS),
+        "subnets":         subnets,
+        "nodes":           nodes,
+        "edges":           edges,
+        "criticalEdgeId":  crit_id,
+        "startOptions":    start_options,
+        "scenarioPresets": {},
+    }

@@ -3,8 +3,8 @@
    Default size: 16×16. Pass width/height to override.
    ─────────────────────────────────────────────────────────────────── */
 
-type P = { size?: number; className?: string };
-const I = ({ size = 16, className, children }: P & { children: React.ReactNode }) => (
+type P = { size?: number; className?: string; style?: React.CSSProperties };
+const I = ({ size = 16, className, style, children }: P & { children: React.ReactNode }) => (
   <svg
     width={size}
     height={size}
@@ -15,6 +15,7 @@ const I = ({ size = 16, className, children }: P & { children: React.ReactNode }
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
+    style={style}
   >
     {children}
   </svg>
@@ -136,5 +137,130 @@ export const DatabaseIcon = (p: P) => (
     <ellipse cx="12" cy="5" rx="9" ry="3" />
     <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+  </I>
+);
+
+export const ShieldIcon = (p: P) => (
+  <I {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></I>
+);
+
+export const TargetIcon = (p: P) => (
+  <I {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
+  </I>
+);
+
+export const DownloadIcon = (p: P) => (
+  <I {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </I>
+);
+
+export const ClockIcon = (p: P) => (
+  <I {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </I>
+);
+
+export const CheckCircleIcon = (p: P) => (
+  <I {...p}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </I>
+);
+
+export const TrendingUpIcon = (p: P) => (
+  <I {...p}>
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+    <polyline points="17 6 23 6 23 12" />
+  </I>
+);
+
+export const FileTextIcon = (p: P) => (
+  <I {...p}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </I>
+);
+
+export const GridIcon = (p: P) => (
+  <I {...p}>
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+  </I>
+);
+
+export const DollarSignIcon = (p: P) => (
+  <I {...p}>
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+  </I>
+);
+
+export const CalendarIcon = (p: P) => (
+  <I {...p}>
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </I>
+);
+
+export const BugIcon = (p: P) => (
+  <I {...p}>
+    <rect x="8" y="6" width="8" height="14" rx="4" />
+    <path d="M19 7l-3 2" />
+    <path d="M5 7l3 2" />
+    <path d="M19 13h-4" />
+    <path d="M5 13h4" />
+    <path d="M19 18l-3-2" />
+    <path d="M5 18l3-2" />
+  </I>
+);
+
+export const LayersIcon = (p: P) => (
+  <I {...p}>
+    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+    <polyline points="2 17 12 22 22 17" />
+    <polyline points="2 12 12 17 22 12" />
+  </I>
+);
+
+export const ActivityIcon = (p: P) => (
+  <I {...p}>
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </I>
+);
+
+export const ExternalLinkIcon = (p: P) => (
+  <I {...p}>
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </I>
+);
+
+export const CpuIcon = (p: P) => (
+  <I {...p}>
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <rect x="9" y="9" width="6" height="6" />
+    <line x1="9" y1="1" x2="9" y2="4" />
+    <line x1="15" y1="1" x2="15" y2="4" />
+    <line x1="9" y1="20" x2="9" y2="23" />
+    <line x1="15" y1="20" x2="15" y2="23" />
+    <line x1="20" y1="9" x2="23" y2="9" />
+    <line x1="20" y1="14" x2="23" y2="14" />
+    <line x1="1" y1="9" x2="4" y2="9" />
+    <line x1="1" y1="14" x2="4" y2="14" />
   </I>
 );

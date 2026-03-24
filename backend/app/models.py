@@ -122,3 +122,100 @@ class NeighborRequest(BaseModel):
 class NeighborResponse(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+# ── Critical Nodes ───────────────────────────────────────────────────────────
+class CriticalNode(BaseModel):
+    name: str
+    type: str
+    privilegeLevel: str
+    highValue: bool
+    betweenness: float
+    pathTraversals: int
+    criticalityScore: float
+
+
+# ── Mitigations ──────────────────────────────────────────────────────────────
+class MitigationSuggestion(BaseModel):
+    priority: str     # Critical | High | Medium | Low
+    category: str
+    title: str
+    detail: str
+
+
+class MitigationsRequest(BaseModel):
+    analysis: AnalysisRequest
+
+
+# ── Export ───────────────────────────────────────────────────────────────────
+class ExportRequest(BaseModel):
+    analysis: AnalysisRequest
+
+
+# ── MITRE ATT&CK ─────────────────────────────────────────────────────────────
+class MITRETechnique(BaseModel):
+    techniqueId: str
+    subTechniqueId: Optional[str] = None
+    name: str
+    tactic: str
+    tacticId: str
+    severity: str
+    usageCount: int
+    relations: list[str]
+    pathIds: list[str]
+
+
+# ── Report ────────────────────────────────────────────────────────────────────
+class ReportRequest(BaseModel):
+    analysis: AnalysisRequest
+    format: str = "markdown"   # "markdown" | "json"
+
+
+# ── Defense ROI ──────────────────────────────────────────────────────────────
+class ROIItem(BaseModel):
+    edgeId: str
+    source: str
+    target: str
+    relation: str
+    pathsEliminated: int
+    riskReductionPercent: float
+    riskReductionAbsolute: float
+    percentOfPaths: float
+    fixComplexity: str          # Low | Medium | High
+    estimatedDays: int
+    roiScore: float             # higher = better investment priority
+
+
+# ── Threat Intelligence ───────────────────────────────────────────────────────
+class CVEEntry(BaseModel):
+    cveId: str
+    severity: str
+    cvssScore: float
+    description: str
+    affectedSoftware: str
+    exploitAvailable: bool
+    patchAvailable: bool
+    publishedDate: str
+
+
+class NodeThreatIntel(BaseModel):
+    nodeName: str
+    cves: list[CVEEntry]
+    totalCVEs: int
+    criticalCount: int
+    highCount: int
+    exploitableCount: int
+    riskBoost: float
+    lastUpdated: str
+    category: str
+    nodeType: str
+
+
+# ── What-If Timeline ─────────────────────────────────────────────────────────
+class TimelinePoint(BaseModel):
+    label: str
+    description: str
+    globalRisk: float
+    totalPaths: int
+    riskReductionPercent: float
+    mitigationsApplied: list[str]

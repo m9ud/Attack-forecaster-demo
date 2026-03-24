@@ -11,28 +11,60 @@ import FocusMode from './components/FocusMode';
 import PathAnimationPlayer from './components/PathAnimationPlayer';
 import DatasetUpload from './components/DatasetUpload';
 import LetterGlitch from './components/LetterGlitch';
+import CriticalNodesPanel from './components/CriticalNodesPanel';
+import MitigationsPanel from './components/MitigationsPanel';
+import NodeContextMenu from './components/NodeContextMenu';
+import MITREPanel from './components/MITREPanel';
+import ReportPanel from './components/ReportPanel';
+import ROIPanel from './components/ROIPanel';
+import TimelineMachine from './components/TimelineMachine';
+import ThreatIntelPanel from './components/ThreatIntelPanel';
 import {
   ZapIcon, GlobeIcon, BarChartIcon, PanelRightIcon,
   SettingsIcon, SlidersIcon, CrosshairIcon,
   AlertTriangleIcon, SearchIcon, LoaderIcon,
   ChevronDownIcon, ChevronUpIcon, NetworkIcon,
+  TargetIcon, ShieldIcon, GridIcon, FileTextIcon,
+  DollarSignIcon, CalendarIcon, BugIcon,
 } from './components/Icons';
 
+type TabId =
+  | 'config' | 'results' | 'scenarios' | 'filters'
+  | 'focus'  | 'critical' | 'mitigate'
+  | 'mitre'  | 'report'   | 'roi'      | 'timeline' | 'intel';
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode; title: string }[] = [
+  { id: 'config',    label: 'Config',    icon: <SettingsIcon size={13} />,     title: 'Configuration' },
+  { id: 'results',   label: 'Results',   icon: <BarChartIcon size={13} />,     title: 'Analysis Results' },
+  { id: 'scenarios', label: 'Scenarios', icon: <ZapIcon size={13} />,          title: 'Scenarios' },
+  { id: 'filters',   label: 'Filters',   icon: <SlidersIcon size={13} />,      title: 'Filters' },
+  { id: 'focus',     label: 'Focus',     icon: <CrosshairIcon size={13} />,    title: 'Focus Mode' },
+  { id: 'critical',  label: 'Nodes',     icon: <TargetIcon size={13} />,       title: 'Critical Nodes' },
+  { id: 'mitigate',  label: 'Mitigate',  icon: <ShieldIcon size={13} />,       title: 'Mitigations' },
+  { id: 'mitre',     label: 'MITRE',     icon: <GridIcon size={13} />,         title: 'MITRE ATT&CK Matrix' },
+  { id: 'report',    label: 'Report',    icon: <FileTextIcon size={13} />,     title: 'Auto Report Generator' },
+  { id: 'roi',       label: 'ROI',       icon: <DollarSignIcon size={13} />,   title: 'Defense ROI Calculator' },
+  { id: 'timeline',  label: 'Timeline',  icon: <CalendarIcon size={13} />,     title: 'What-If Time Machine' },
+  { id: 'intel',     label: 'Intel',     icon: <BugIcon size={13} />,          title: 'Threat Intelligence Feed' },
+];
+
 export default function App() {
-  const loading = useStore((s: any) => s.loading);
-  const error = useStore((s: any) => s.error);
-  const analysis = useStore((s: any) => s.analysis);
-  const nodes = useStore((s: any) => s.nodes);
-  const edges = useStore((s: any) => s.edges);
-  const clusterView = useStore((s: any) => s.clusterView);
-  const toggleClusterView = useStore((s: any) => s.toggleClusterView);
-  const focusNode = useStore((s: any) => s.focusNode);
-  const selectedPathId = useStore((s: any) => s.selectedPathId);
-  const animatingPathId = useStore((s: any) => s.animatingPathId);
+  const loading               = useStore((s: any) => s.loading);
+  const error                 = useStore((s: any) => s.error);
+  const analysis              = useStore((s: any) => s.analysis);
+  const nodes                 = useStore((s: any) => s.nodes);
+  const edges                 = useStore((s: any) => s.edges);
+  const clusterView           = useStore((s: any) => s.clusterView);
+  const toggleClusterView     = useStore((s: any) => s.toggleClusterView);
+  const focusNode             = useStore((s: any) => s.focusNode);
+  const selectedPathId        = useStore((s: any) => s.selectedPathId);
+  const animatingPathId       = useStore((s: any) => s.animatingPathId);
+  const isolateSelectedPath   = useStore((s: any) => s.isolateSelectedPath);
+  const toggleIsolateSelectedPath = useStore((s: any) => s.toggleIsolateSelectedPath);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [chartsOpen, setChartsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'config' | 'results' | 'scenarios' | 'filters' | 'focus'>('config');
+  const [chartsOpen,  setChartsOpen]  = useState(false);
+  const [activeTab,   setActiveTab]   = useState<TabId>('config');
 
   /* auto-switch tabs when analysis finishes */
   useEffect(() => {
@@ -42,7 +74,7 @@ export default function App() {
     }
   }, [analysis]);
 
-  /* ── Landing screen: no dataset loaded yet ──────────────────────── */
+  /* ── Landing screen ─────────────────────────────────────────────── */
   const datasetLoaded = nodes.length > 0;
 
   if (!datasetLoaded) {
@@ -130,6 +162,20 @@ export default function App() {
         <div className="graph-area">
           <GraphView />
 
+          {selectedPathId && (
+            <button
+              className={`isolate-pill ${isolateSelectedPath ? 'isolate-pill--active' : ''}`}
+              onClick={toggleIsolateSelectedPath}
+              title={isolateSelectedPath ? 'Show all nodes' : 'Show selected path only'}
+            >
+              {isolateSelectedPath ? (
+                <><CrosshairIcon size={13} /> Isolated: {selectedPathId} — Click to show all</>
+              ) : (
+                <><CrosshairIcon size={13} /> Isolate path {selectedPathId}</>
+              )}
+            </button>
+          )}
+
           {(selectedPathId || animatingPathId) && (
             <div className="animation-overlay">
               <PathAnimationPlayer />
@@ -141,62 +187,39 @@ export default function App() {
         <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}>
           {sidebarOpen && (
             <>
-              {/* Tab bar */}
-              <div className="sidebar-tabs">
-                <button
-                  className={`sidebar-tab ${activeTab === 'config' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('config')}
-                  title="Configuration"
-                >
-                  <SettingsIcon size={14} />
-                  <span>Config</span>
-                </button>
-                <button
-                  className={`sidebar-tab ${activeTab === 'results' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('results')}
-                  title="Analysis Results"
-                >
-                  <BarChartIcon size={14} />
-                  <span>Results</span>
-                </button>
-                <button
-                  className={`sidebar-tab ${activeTab === 'scenarios' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('scenarios')}
-                  title="Scenarios"
-                >
-                  <ZapIcon size={14} />
-                  <span>Scenarios</span>
-                </button>
-                <button
-                  className={`sidebar-tab ${activeTab === 'filters' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('filters')}
-                  title="Filters"
-                >
-                  <SlidersIcon size={14} />
-                  <span>Filters</span>
-                </button>
-                <button
-                  className={`sidebar-tab ${activeTab === 'focus' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('focus')}
-                  title="Focus Mode"
-                >
-                  <CrosshairIcon size={14} />
-                  <span>Focus</span>
-                </button>
+              {/* Tab bar — scrollable */}
+              <div className="sidebar-tabs sidebar-tabs--scroll">
+                {TABS.map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`sidebar-tab ${activeTab === tab.id ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab.id)}
+                    title={tab.title}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                    {/* new-feature indicator */}
+                    {['mitre','report','roi','timeline','intel'].includes(tab.id) && (
+                      <span className="tab-new-dot" />
+                    )}
+                  </button>
+                ))}
               </div>
 
               {/* Tab content */}
               <div className="sidebar-content">
-                {activeTab === 'config' && (
-                  <>
-                    <DatasetUpload />
-                    <AnalysisPanel />
-                  </>
-                )}
-                {activeTab === 'results' && <ResultsPanel />}
+                {activeTab === 'config'    && <><DatasetUpload /><AnalysisPanel /></>}
+                {activeTab === 'results'   && <ResultsPanel />}
                 {activeTab === 'scenarios' && <ScenarioPanel />}
-                {activeTab === 'filters' && <FilterPanel />}
-                {activeTab === 'focus' && <FocusMode />}
+                {activeTab === 'filters'   && <FilterPanel />}
+                {activeTab === 'focus'     && <FocusMode />}
+                {activeTab === 'critical'  && <CriticalNodesPanel />}
+                {activeTab === 'mitigate'  && <MitigationsPanel />}
+                {activeTab === 'mitre'     && <MITREPanel />}
+                {activeTab === 'report'    && <ReportPanel />}
+                {activeTab === 'roi'       && <ROIPanel />}
+                {activeTab === 'timeline'  && <TimelineMachine />}
+                {activeTab === 'intel'     && <ThreatIntelPanel />}
               </div>
             </>
           )}
@@ -214,6 +237,7 @@ export default function App() {
       </div>
 
       <ExplanationModal />
+      <NodeContextMenu />
     </div>
   );
 }

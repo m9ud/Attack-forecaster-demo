@@ -1,6 +1,7 @@
 /* ── Custom Node with SVG Icons ─────────────────────────────────────── */
 
 import { Handle, Position } from 'reactflow';
+import { useStore } from '../store';
 
 interface IconNodeData {
   label: string;
@@ -96,16 +97,27 @@ const HV_BG = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
 const ANIM_ACTIVE_BG = 'linear-gradient(135deg, #00ff88 0%, #059669 100%)';
 
 export default function IconNode({ data }: { data: IconNodeData }) {
+  const openContextMenu = useStore((s: any) => s.openContextMenu);
+
   const bg = data.animActive ? ANIM_ACTIVE_BG
     : data.highValue ? HV_BG
     : (TYPE_BG[data.nodeType] ?? TYPE_BG.Server);
   const isHL = data.highlighted;
   const isAnim = data.animActive;
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!data.isCluster) {
+      openContextMenu(data.label, e.clientX, e.clientY);
+    }
+  };
+
   return (
     <div
       className={`icon-node ${isHL ? 'icon-node--hl' : ''} ${data.highValue ? 'icon-node--hv' : ''} ${isAnim ? 'icon-node--anim' : ''} ${data.isCluster ? 'icon-node--cluster' : ''}`}
       style={{ background: bg }}
+      onContextMenu={handleContextMenu}
     >
       <Handle type="target" position={Position.Left} className="icon-handle" />
       <Handle type="target" position={Position.Top} className="icon-handle" id="t-top" />

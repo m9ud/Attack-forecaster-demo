@@ -1,7 +1,7 @@
 /* ── What-If Scenario Panel — dynamic presets loaded from dataset ──── */
 
 import { useStore } from '../store';
-import { ZapIcon } from './Icons';
+import { ZapIcon, ShieldIcon, SearchIcon } from './Icons';
 
 /* ── Delta helpers ──────────────────────────────────────────────────── */
 function deltaLabel(before: number, after: number): string {
@@ -71,7 +71,7 @@ export default function ScenarioPanel() {
       {offensive.length > 0 && (
         <div className="scenario-category">
           <h4 className="scenario-cat-title scenario-cat-offensive">
-            🔴 Offensive — "What if an attacker gains…"
+            <ZapIcon size={13} /> Offensive — "What if an attacker gains…"
           </h4>
           <div className="scenario-buttons">
             {offensive.map(([id, p]) => (
@@ -97,7 +97,7 @@ export default function ScenarioPanel() {
       {defensive.length > 0 && (
         <div className="scenario-category">
           <h4 className="scenario-cat-title scenario-cat-defensive">
-            🟢 Defensive — "What if we remediate…"
+            <ShieldIcon size={13} /> Defensive — "What if we remediate…"
           </h4>
           <div className="scenario-buttons">
             {defensive.map(([id, p]) => (
@@ -132,7 +132,7 @@ export default function ScenarioPanel() {
 
           {scenarioHighlight && (
             <div className="scenario-vis-hint">
-              🔍 Showing top surviving path on graph
+              <SearchIcon size={11} /> Showing top surviving path on graph
               {scenarioHighlight.removedEdgeIds.length > 0 && (
                 <span> · Removed edges shown as dashed red</span>
               )}

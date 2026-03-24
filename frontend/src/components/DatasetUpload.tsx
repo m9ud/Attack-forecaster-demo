@@ -22,7 +22,8 @@ export default function DatasetUpload() {
   const [fileName, setFileName]   = useState<string | null>(null);
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.json')) { alert('Please upload a .json file'); return; }
+    const ok = file.name.endsWith('.json') || file.name.endsWith('.zip');
+    if (!ok) { alert('Please upload a .json or SharpHound .zip file'); return; }
     setFileName(file.name);
     await uploadDataset(file);
   };
@@ -71,7 +72,7 @@ export default function DatasetUpload() {
         onDrop={onDrop}
         onClick={() => fileRef.current?.click()}
       >
-        <input ref={fileRef} type="file" accept=".json" onChange={onFileChange} style={{ display: 'none' }} />
+        <input ref={fileRef} type="file" accept=".json,.zip" onChange={onFileChange} style={{ display: 'none' }} />
         {datasetUploading ? (
           <div className="dataset-dropzone-content">
             <LoaderIcon size={14} className="spin-icon" />
@@ -80,8 +81,8 @@ export default function DatasetUpload() {
         ) : (
           <div className="dataset-dropzone-content">
             <span className="dataset-dropzone-icon"><UploadIcon /></span>
-            <span>Drop JSON file here or <strong>click to browse</strong></span>
-            <span className="dataset-dropzone-hint">Accepts .json files</span>
+            <span>Drop file here or <strong>click to browse</strong></span>
+            <span className="dataset-dropzone-hint">Accepts .json · SharpHound .zip</span>
           </div>
         )}
       </div>

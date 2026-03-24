@@ -124,3 +124,243 @@ export async function fetchScenarios(): Promise<Record<string, ScenarioPreset>> 
   if (!r.ok) throw new Error('Failed to load scenarios');
   return r.json();
 }
+
+// ── Advanced analytics ───────────────────────────────────────────────────────
+
+export interface CriticalNode {
+  name: string;
+  type: string;
+  privilegeLevel: string;
+  highValue: boolean;
+  betweenness: number;
+  pathTraversals: number;
+  criticalityScore: number;
+}
+
+export interface MitigationSuggestion {
+  priority: 'Critical' | 'High' | 'Medium' | 'Low';
+  category: string;
+  title: string;
+  detail: string;
+}
+
+export async function fetchCriticalNodes(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<CriticalNode[]> {
+  const r = await fetch(`${API}/critical-nodes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('Failed to compute critical nodes');
+  return r.json();
+}
+
+export async function fetchMitigations(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<MitigationSuggestion[]> {
+  const r = await fetch(`${API}/mitigations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('Failed to fetch mitigations');
+  return r.json();
+}
+
+export async function exportAnalysis(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<object> {
+  const r = await fetch(`${API}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('Export failed');
+  return r.json();
+}
+
+// ── MITRE ATT&CK ─────────────────────────────────────────────────────────────
+
+export interface MITRETechnique {
+  id: string;
+  techniqueId: string;
+  subTechniqueId: string | null;
+  name: string;
+  tactic: string;
+  tacticId: string;
+  severity: string;
+  description: string;
+  usageCount: number;
+  relations: string[];
+  pathIds: string[];
+}
+
+export interface MITREMatrixResult {
+  techniques: MITRETechnique[];
+  totalTechniques: number;
+  navigatorLayer: object;
+  totalPaths: number;
+  globalRisk: number;
+}
+
+export async function fetchMITREMatrix(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<MITREMatrixResult> {
+  const r = await fetch(`${API}/mitre-matrix`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('MITRE matrix fetch failed');
+  return r.json();
+}
+
+// ── Auto Report ───────────────────────────────────────────────────────────────
+
+export interface ReportResult {
+  markdown: string;
+  generatedAt: string;
+  globalRisk: number;
+  totalPaths: number;
+}
+
+export async function fetchReport(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<ReportResult> {
+  const r = await fetch(`${API}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ analysis: params, format: 'markdown' }),
+  });
+  if (!r.ok) throw new Error('Report generation failed');
+  return r.json();
+}
+
+// ── Defense ROI ───────────────────────────────────────────────────────────────
+
+export interface ROIItem {
+  edgeId: string;
+  source: string;
+  target: string;
+  relation: string;
+  pathsEliminated: number;
+  riskReductionPercent: number;
+  riskReductionAbsolute: number;
+  percentOfPaths: number;
+  fixComplexity: 'Low' | 'Medium' | 'High';
+  estimatedDays: number;
+  roiScore: number;
+}
+
+export async function fetchROI(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<ROIItem[]> {
+  const r = await fetch(`${API}/roi-calculator`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('ROI calculation failed');
+  return r.json();
+}
+
+// ── Threat Intel ──────────────────────────────────────────────────────────────
+
+export interface CVEEntry {
+  cveId: string;
+  severity: string;
+  cvssScore: number;
+  description: string;
+  affectedSoftware: string;
+  exploitAvailable: boolean;
+  patchAvailable: boolean;
+  publishedDate: string;
+}
+
+export interface NodeIntel {
+  nodeName: string;
+  cves: CVEEntry[];
+  totalCVEs: number;
+  criticalCount: number;
+  highCount: number;
+  exploitableCount: number;
+  riskBoost: number;
+  lastUpdated: string;
+  category: string;
+  nodeType: string;
+}
+
+export interface ThreatIntelResult {
+  items: NodeIntel[];
+  totalNodes: number;
+  totalCVEs: number;
+  exploitableCount: number;
+}
+
+export async function fetchThreatIntel(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<ThreatIntelResult> {
+  const r = await fetch(`${API}/threat-intel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('Threat intel fetch failed');
+  return r.json();
+}
+
+// ── What-If Timeline ──────────────────────────────────────────────────────────
+
+export interface TimelinePoint {
+  label: string;
+  description: string;
+  globalRisk: number;
+  totalPaths: number;
+  riskReductionPercent: number;
+  mitigationsApplied: string[];
+}
+
+export async function fetchTimeline(params: {
+  startNodes: string[];
+  targetNode: string;
+  minDepth: number;
+  maxDepth: number;
+  k: number;
+}): Promise<TimelinePoint[]> {
+  const r = await fetch(`${API}/timeline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error('Timeline simulation failed');
+  return r.json();
+}
