@@ -143,15 +143,15 @@ PRIV_GAIN: dict[str, str] = {
     "Owns":               "Ownership → WriteDACL on {target}",
 }
 
-# Phase emoji for readable output
+# Phase labels for readable output
 _PHASE_ICON = {
-    "Reconnaissance":      "🔍",
-    "Credential Access":   "🔑",
-    "Lateral Movement":    "↔️",
-    "Privilege Escalation":"⬆️",
-    "Persistence":         "📌",
-    "Execution":           "⚙️",
-    "Exfiltration":        "📤",
+    "Reconnaissance":      "[RECON]",
+    "Credential Access":   "[CRED]",
+    "Lateral Movement":    "[LATERAL]",
+    "Privilege Escalation":"[PRIVESC]",
+    "Persistence":         "[PERSIST]",
+    "Execution":           "[EXEC]",
+    "Exfiltration":        "[EXFIL]",
 }
 
 
