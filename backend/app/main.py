@@ -1,7 +1,9 @@
 """
 Attack Path Forecaster — FastAPI application
 Endpoints: /graph, /analyze, /explain, /simulate, /scenarios,
-           /upload-dataset, /reset-dataset, /dataset-info
+           /upload-dataset, /reset-dataset, /dataset-info,
+           /critical-nodes, /mitigations, /export, /report,
+           /roi-calculator, /timeline
 """
 
 import json
@@ -26,9 +28,7 @@ from .models import (
 from . import dataset as ds
 from .graph_engine import GraphEngine
 from .explainer import explain_path
-from . import mitre_mapping as mitre
 from . import report_generator as report_gen
-from . import threat_intel as ti
 
 app = FastAPI(title="Attack Path Forecaster", version="1.0.0")
 
@@ -59,7 +59,7 @@ def _require_dataset():
 _last_analysis: dict[str, dict] = {}
 
 
-# ── Endpoints ───────────────────────────────────────────────────────────────
+# Endpoints
 
 @app.get("/graph", response_model=GraphResponse)
 def get_graph():
@@ -178,7 +178,7 @@ def get_scenarios():
     return ds.SCENARIO_PRESETS
 
 
-# ── Dataset management endpoints ────────────────────────────────────────
+# Dataset management endpoints
 
 @app.post("/upload-dataset")
 async def upload_dataset(file: UploadFile = File(...)):
@@ -186,7 +186,7 @@ async def upload_dataset(file: UploadFile = File(...)):
     Upload a JSON or SharpHound ZIP dataset to replace the active graph.
     Accepts:
       - Native app JSON (nodes/edges format)
-      - BloodHound single-type JSON (users.json, groups.json, etc.)
+      - Single-type AD export JSON (users.json, groups.json, etc.)
       - SharpHound ZIP export (contains multiple per-type JSON files)
     """
     global engine, _last_analysis
@@ -196,22 +196,20 @@ async def upload_dataset(file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(400, f"Could not read file: {exc}")
 
-    # ── Detect and parse ────────────────────────────────────────────────
+    # Detect and parse
     try:
         if ds.is_sharphound_zip(content):
-            # SharpHound / BloodHound ZIP export
             raw = ds.convert_sharphound_zip(content)
         else:
             raw = json.loads(content)
-            # Single-type BloodHound JSON (e.g. users.json exported individually)
-            if ds.is_bloodhound_json(raw):
-                raw = ds.convert_bloodhound_json(raw)
+            if ds.is_ad_export_json(raw):
+                raw = ds.convert_ad_export_json(raw)
     except json.JSONDecodeError as exc:
         raise HTTPException(400, f"Invalid JSON: {exc}")
     except Exception as exc:
         raise HTTPException(400, f"Could not parse file: {exc}")
 
-    # Validate (skip for converted BloodHound data — already normalised)
+    # Validate (skip for converted data — already normalised)
     errors = ds.validate_dataset(raw)
     if errors:
         raise HTTPException(422, detail={"validationErrors": errors})
@@ -270,7 +268,7 @@ def download_sample_dataset(filename: str):
     return FileResponse(path, media_type="application/json", filename=filename)
 
 
-# ── Advanced analytics endpoints ─────────────────────────────────────────────
+# Advanced analytics endpoints
 
 @app.post("/critical-nodes", response_model=list[CriticalNode])
 def critical_nodes(req: AnalysisRequest):
@@ -342,48 +340,7 @@ def export_analysis(req: AnalysisRequest):
     }
 
 
-# ── MITRE ATT&CK endpoints ────────────────────────────────────────────────────
-
-@app.post("/mitre-matrix")
-def mitre_matrix(req: AnalysisRequest):
-    """
-    Run analysis and return MITRE ATT&CK technique coverage + Navigator layer.
-    The navigatorLayer can be imported directly into the ATT&CK Navigator tool.
-    """
-    _require_dataset()
-    result = engine.analyze(
-        req.startNodes, req.targetNode,
-        req.minDepth, req.maxDepth, req.k,
-    )
-    techniques = mitre.get_techniques_for_paths(result["paths"])
-    navigator_layer = mitre.build_navigator_layer(
-        result["paths"],
-        dataset_name=f"APF — {req.targetNode}",
-    )
-    # Convert technique dict values to list for frontend
-    technique_list = [
-        {
-            "id": tid,
-            **info,
-        }
-        for tid, info in techniques.items()
-    ]
-    # Sort by severity then usage count
-    sev_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-    technique_list.sort(
-        key=lambda x: (sev_order.get(x.get("severity", "Low"), 1), x.get("usageCount", 0)),
-        reverse=True,
-    )
-    return {
-        "techniques": technique_list,
-        "totalTechniques": len(technique_list),
-        "navigatorLayer": navigator_layer,
-        "totalPaths": result["totalPaths"],
-        "globalRisk": result["globalRisk"],
-    }
-
-
-# ── Auto Report Generator ─────────────────────────────────────────────────────
+# Auto Report Generator
 
 @app.post("/report")
 def generate_report(req: ReportRequest):
@@ -430,7 +387,7 @@ def generate_report(req: ReportRequest):
     }
 
 
-# ── Defense ROI Calculator ────────────────────────────────────────────────────
+# Defense ROI Calculator
 
 @app.post("/roi-calculator", response_model=list[ROIItem])
 def roi_calculator(req: AnalysisRequest):
@@ -447,44 +404,7 @@ def roi_calculator(req: AnalysisRequest):
     return engine.compute_defense_roi(result)
 
 
-# ── Threat Intelligence Feed ──────────────────────────────────────────────────
-
-@app.post("/threat-intel")
-def threat_intel_feed(req: AnalysisRequest):
-    """
-    Return CVE/threat intelligence for all nodes appearing in discovered attack paths.
-    Data is sourced from a mock NVD-aligned database keyed by OS/role category.
-    """
-    _require_dataset()
-    result = engine.analyze(
-        req.startNodes, req.targetNode,
-        req.minDepth, req.maxDepth, req.k,
-    )
-    # Collect all nodes appearing in any path
-    nodes_in_paths: set[str] = set()
-    for path in result["paths"]:
-        for node_name in path["nodes"]:
-            nodes_in_paths.add(node_name)
-
-    relevant_nodes = [n for n in ds.NODES if n["name"] in nodes_in_paths]
-    intel = ti.get_threat_intel(relevant_nodes)
-
-    # Convert to list format for frontend
-    intel_list = [
-        {"nodeName": name, **data}
-        for name, data in intel.items()
-    ]
-    intel_list.sort(key=lambda x: x.get("criticalCount", 0) + x.get("highCount", 0), reverse=True)
-
-    return {
-        "items": intel_list,
-        "totalNodes": len(intel_list),
-        "totalCVEs": sum(x.get("totalCVEs", 0) for x in intel_list),
-        "exploitableCount": sum(x.get("exploitableCount", 0) for x in intel_list),
-    }
-
-
-# ── What-If Time Machine ──────────────────────────────────────────────────────
+# What-If Time Machine
 
 @app.post("/timeline", response_model=list[TimelinePoint])
 def what_if_timeline(req: AnalysisRequest):

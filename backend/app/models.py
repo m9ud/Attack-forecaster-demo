@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 
-# ── Graph ───────────────────────────────────────────────────────────────────
+# Graph
 class GraphNode(BaseModel):
     id: str
     name: str
@@ -28,7 +28,7 @@ class GraphResponse(BaseModel):
     edges: list[GraphEdge]
 
 
-# ── Analysis ────────────────────────────────────────────────────────────────
+# Analysis
 class AnalysisRequest(BaseModel):
     startNodes: list[str]
     targetNode: str = "kingslanding"
@@ -77,7 +77,7 @@ class AnalysisResponse(BaseModel):
     globalRisk: float
 
 
-# ── Simulation ──────────────────────────────────────────────────────────────
+# Simulation
 class Mutation(BaseModel):
     type: str          # "removeEdge" | "removeNode" | "addEdge"
     edgeId: Optional[str] = None
@@ -124,7 +124,7 @@ class NeighborResponse(BaseModel):
     edges: list[GraphEdge]
 
 
-# ── Critical Nodes ───────────────────────────────────────────────────────────
+# Critical Nodes
 class CriticalNode(BaseModel):
     name: str
     type: str
@@ -135,7 +135,7 @@ class CriticalNode(BaseModel):
     criticalityScore: float
 
 
-# ── Mitigations ──────────────────────────────────────────────────────────────
+# Mitigations
 class MitigationSuggestion(BaseModel):
     priority: str     # Critical | High | Medium | Low
     category: str
@@ -147,31 +147,18 @@ class MitigationsRequest(BaseModel):
     analysis: AnalysisRequest
 
 
-# ── Export ───────────────────────────────────────────────────────────────────
+# Export
 class ExportRequest(BaseModel):
     analysis: AnalysisRequest
 
 
-# ── MITRE ATT&CK ─────────────────────────────────────────────────────────────
-class MITRETechnique(BaseModel):
-    techniqueId: str
-    subTechniqueId: Optional[str] = None
-    name: str
-    tactic: str
-    tacticId: str
-    severity: str
-    usageCount: int
-    relations: list[str]
-    pathIds: list[str]
-
-
-# ── Report ────────────────────────────────────────────────────────────────────
+# Report
 class ReportRequest(BaseModel):
     analysis: AnalysisRequest
     format: str = "markdown"   # "markdown" | "json"
 
 
-# ── Defense ROI ──────────────────────────────────────────────────────────────
+# Defense ROI
 class ROIItem(BaseModel):
     edgeId: str
     source: str
@@ -186,32 +173,7 @@ class ROIItem(BaseModel):
     roiScore: float             # higher = better investment priority
 
 
-# ── Threat Intelligence ───────────────────────────────────────────────────────
-class CVEEntry(BaseModel):
-    cveId: str
-    severity: str
-    cvssScore: float
-    description: str
-    affectedSoftware: str
-    exploitAvailable: bool
-    patchAvailable: bool
-    publishedDate: str
-
-
-class NodeThreatIntel(BaseModel):
-    nodeName: str
-    cves: list[CVEEntry]
-    totalCVEs: int
-    criticalCount: int
-    highCount: int
-    exploitableCount: int
-    riskBoost: float
-    lastUpdated: str
-    category: str
-    nodeType: str
-
-
-# ── What-If Timeline ─────────────────────────────────────────────────────────
+# What-If Timeline
 class TimelinePoint(BaseModel):
     label: str
     description: str

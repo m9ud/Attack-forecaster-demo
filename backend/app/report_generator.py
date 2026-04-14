@@ -5,10 +5,8 @@ Auto Report Generator — builds Executive + Technical Markdown reports.
 from __future__ import annotations
 from datetime import datetime
 
-from .mitre_mapping import EDGE_TO_MITRE, get_techniques_for_paths, TACTIC_NAMES
 
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# Helpers
 
 def _risk_bar(score: float, width: int = 10) -> str:
     filled = round(max(0.0, min(score, 100.0)) / 100 * width)
@@ -19,7 +17,7 @@ def _impact_prefix(impact: str) -> str:
     return {"Critical": "[!!!]", "High": "[!! ]", "Medium": "[ ! ]", "Low": "[   ]"}.get(impact, "[   ]")
 
 
-# ── Sections ─────────────────────────────────────────────────────────────────
+# Sections
 
 def generate_executive_summary(result: dict, dataset_info: dict, params: dict) -> str:
     global_risk = result.get("globalRisk", 0)
@@ -139,17 +137,6 @@ def generate_technical_findings(result: dict, params: dict) -> str:
             "",
         ]
 
-        # MITRE techniques for this path
-        mitre_items = []
-        for et in edge_types:
-            t = EDGE_TO_MITRE.get(et)
-            if t:
-                tid = t.get("subTechniqueId") or t["techniqueId"]
-                mitre_items.append(f"`{tid}` {t['name'].split(':')[0]}")
-        if mitre_items:
-            lines.append(f"**MITRE ATT&CK:** {' · '.join(mitre_items)}")
-            lines.append("")
-
         lines.append("---")
         lines.append("")
 
@@ -169,51 +156,6 @@ def generate_technical_findings(result: dict, params: dict) -> str:
         lines.append(
             f"| {rank} | `{edge.get('relation','?')}` | `{edge.get('source','?')}` "
             f"| `{edge.get('target','?')}` | {edge.get('traversalCount',0)} | {pct:.1f}% {bar} |"
-        )
-
-    lines.append("")
-    return "\n".join(lines)
-
-
-def generate_mitre_section(paths: list[dict]) -> str:
-    usage = get_techniques_for_paths(paths)
-
-    lines = [
-        "## MITRE ATT&CK Coverage",
-        "",
-        f"**{len(usage)} unique techniques** identified across {len(paths)} attack paths.",
-        "",
-    ]
-
-    if not usage:
-        lines.append("_No MITRE techniques identified._")
-        return "\n".join(lines)
-
-    # Group by tactic
-    by_tactic: dict[str, list] = {}
-    for tid, info in usage.items():
-        tactic_name = TACTIC_NAMES.get(info.get("tacticId", ""), info.get("tactic", "Unknown"))
-        by_tactic.setdefault(tactic_name, []).append((tid, info))
-
-    lines += [
-        "| Tactic | Technique ID | Name | Paths | Severity | Relations |",
-        "|--------|-------------|------|-------|----------|-----------|",
-    ]
-
-    severity_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-    all_techniques = []
-    for tactic_name, techniques in by_tactic.items():
-        for tid, info in techniques:
-            all_techniques.append((tactic_name, tid, info))
-
-    all_techniques.sort(key=lambda x: severity_order.get(x[2].get("severity", "Low"), 1), reverse=True)
-
-    for tactic_name, tid, info in all_techniques:
-        sev = info.get("severity", "Low")
-        prefix = _impact_prefix(sev)
-        lines.append(
-            f"| {tactic_name} | `{tid}` | {info.get('name', '').split(':')[0]} "
-            f"| {info.get('usageCount', 0)} | {prefix} {sev} | {', '.join(info.get('relations', []))} |"
         )
 
     lines.append("")
@@ -308,7 +250,7 @@ def generate_remediation_roadmap(mitigations: list[dict]) -> str:
     return "\n".join(lines)
 
 
-# ── Full report assembler ─────────────────────────────────────────────────────
+# Full report assembler
 
 def generate_full_report(
     result: dict,
@@ -331,9 +273,8 @@ def generate_full_report(
         "",
         "1. [Executive Summary](#executive-summary)",
         "2. [Technical Findings](#technical-findings)",
-        "3. [MITRE ATT&CK Coverage](#mitre-attck-coverage)",
-        "4. [Risk Heatmap](#risk-heatmap)",
-        "5. [Remediation Roadmap](#remediation-roadmap)",
+        "3. [Risk Heatmap](#risk-heatmap)",
+        "4. [Remediation Roadmap](#remediation-roadmap)",
         "",
         "---",
         "",
@@ -341,7 +282,6 @@ def generate_full_report(
 
     exec_sum = generate_executive_summary(result, dataset_info, params)
     tech = generate_technical_findings(result, params)
-    mitre = generate_mitre_section(result.get("paths", []))
     heatmap = generate_risk_heatmap(result.get("paths", []))
     roadmap = generate_remediation_roadmap(mitigations)
 
@@ -353,4 +293,4 @@ def generate_full_report(
         "_Review findings with a qualified security professional before taking action._",
     ])
 
-    return "\n\n".join([header, exec_sum, tech, mitre, heatmap, roadmap, footer])
+    return "\n\n".join([header, exec_sum, tech, heatmap, roadmap, footer])

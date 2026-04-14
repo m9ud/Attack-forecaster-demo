@@ -1,63 +1,71 @@
-/* ── Custom Node with SVG Icons ─────────────────────────────────────── */
-
 import { Handle, Position } from 'reactflow';
 import { useStore } from '../store';
 
-/* ── SVG Icons ─────────────────────────────────────────────────────── */
 const UserIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
   </svg>
 );
 
+// Privileged user — crown above person
 const AdminIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2l1.09 3.26L16 6l-2.18 2.18L14.54 12 12 10.27 9.46 12l.72-3.82L8 6l2.91-.74z" />
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="10" r="3.5" />
+    <path d="M5 21c0-3.5 3.1-6.5 7-6.5s7 3 7 6.5" />
+    <path d="M7 6l2.5 2.5L12 4l2.5 4.5L17 6" />
+    <line x1="7" y1="6" x2="17" y2="6" />
   </svg>
 );
 
+// Group — two people
 const GroupIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    <circle cx="9" cy="7" r="3.5" />
+    <circle cx="17" cy="9" r="2.5" />
+    <path d="M2 21c0-3.8 3.1-6.5 7-6.5s7 2.7 7 6.5" />
+    <path d="M17 14.5c2.5.3 5 2 5 5" />
   </svg>
 );
 
+// Server — rack with status LED
 const ServerIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
+    <rect x="2" y="3" width="20" height="7" rx="1.5" />
+    <rect x="2" y="14" width="20" height="7" rx="1.5" />
+    <circle cx="6.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="6.5" cy="17.5" r="1" fill="currentColor" stroke="none" />
+    <line x1="10" y1="6.5" x2="18" y2="6.5" />
+    <line x1="10" y1="17.5" x2="18" y2="17.5" />
+    <line x1="10" y1="19" x2="15" y2="19" />
   </svg>
 );
 
+// Workstation — monitor with stand
 const ComputerIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-    <line x1="8" y1="21" x2="16" y2="21" />
-    <line x1="12" y1="17" x2="12" y2="21" />
+    <rect x="2" y="3" width="20" height="13" rx="2" />
+    <polyline points="8 21 12 17 16 21" />
+    <line x1="12" y1="17" x2="12" y2="16" />
   </svg>
 );
 
+// High-value asset shield
 const ShieldIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="M9 12l2 2 4-4" />
+    <path d="M12 3L4 7v5c0 4.4 3.4 8.5 8 9.5 4.6-1 8-5.1 8-9.5V7z" />
+    <polyline points="9 12 11 14 15 10" />
   </svg>
 );
 
+// Domain Controller — server with crown
 const DomainControllerIcon = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
-    <path d="M12 2l1.5 2.5L12 7l-1.5-2.5z" fill="currentColor" />
+    <rect x="2" y="9" width="20" height="6" rx="1.5" />
+    <rect x="2" y="17" width="20" height="5" rx="1.5" />
+    <circle cx="6.5" cy="12" r="1" fill="currentColor" stroke="none" />
+    <line x1="10" y1="12" x2="18" y2="12" />
+    <path d="M7 9V7l2.5 2L12 4l2.5 5L17 7v2" />
   </svg>
 );
 

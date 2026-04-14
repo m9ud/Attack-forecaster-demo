@@ -13,10 +13,9 @@ import LetterGlitch from './components/LetterGlitch';
 import CriticalNodesPanel from './components/CriticalNodesPanel';
 import MitigationsPanel from './components/MitigationsPanel';
 import NodeContextMenu from './components/NodeContextMenu';
-import MITREPanel from './components/MITREPanel';
 import ReportPanel from './components/ReportPanel';
 import {
-  ZapIcon, GlobeIcon, BarChartIcon, PanelRightIcon,
+  ZapIcon, PathIcon, GlobeIcon, BarChartIcon, PanelRightIcon,
   SettingsIcon, CrosshairIcon,
   AlertTriangleIcon, SearchIcon, LoaderIcon,
   ChevronDownIcon, ChevronUpIcon, NetworkIcon,
@@ -74,13 +73,13 @@ export default function App() {
           <div className="landing-overlay">
             <div className="landing-glass-card">
               <div className="landing-brand">
-                <ZapIcon size={20} className="landing-brand-icon" />
+                <PathIcon size={20} className="landing-brand-icon" />
                 <span className="landing-brand-name">Attack Path Forecaster</span>
               </div>
               <h2 className="landing-heading">Load a Dataset to Begin</h2>
               <p className="landing-subtext">
-                Drop a BloodHound-style JSON file to visualise your Active Directory attack graph,
-                rank paths by risk, and simulate defences.
+                Upload an Active Directory graph dataset to map attack paths,
+                rank them by risk, and simulate defensive changes.
               </p>
               <DatasetUpload />
             </div>
@@ -95,7 +94,7 @@ export default function App() {
       {/* ── Top Bar ──────────────────────────────────────────────────── */}
       <header className="topbar">
         <div className="topbar-left">
-          <ZapIcon size={18} className="topbar-logo-icon" />
+          <PathIcon size={18} className="topbar-logo-icon" />
           <h1 className="topbar-title">Attack Path Forecaster</h1>
           <span className="topbar-badge">
             AD Graph · {nodes.length} Nodes · {edges.length} Edges
@@ -182,7 +181,7 @@ export default function App() {
                   >
                     {tab.icon}
                     <span>{tab.label}</span>
-                    {['mitre','report'].includes(tab.id) && (
+                    {tab.id === 'report' && (
                       <span className="tab-new-dot" />
                     )}
                   </button>
@@ -197,7 +196,6 @@ export default function App() {
                 {activeTab === 'filters'   && <FilterPanel />}
                 {activeTab === 'critical'  && <CriticalNodesPanel />}
                 {activeTab === 'mitigate'  && <MitigationsPanel />}
-                {activeTab === 'mitre'     && <MITREPanel />}
                 {activeTab === 'report'    && <ReportPanel />}
               </div>
             </>

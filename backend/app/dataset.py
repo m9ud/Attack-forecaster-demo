@@ -14,7 +14,7 @@ import copy
 import zipfile
 from pathlib import Path
 
-# ── Default weight table (used when edges don't carry their own weight) ──
+# Default weight table (used when edges don't carry their own weight)
 DEFAULT_WEIGHTS = {
     "MemberOf": 3, "CanRDP": 5, "HasSession": 6,
     "AdminTo": 7, "WriteDACL": 8, "GenericAll": 9,
@@ -26,7 +26,7 @@ DEFAULT_WEIGHTS = {
     "SQLAdmin": 8,
 }
 
-# ── Map GOAD ACL right names to BloodHound-style relation names ──
+# Map GOAD ACL right names to relation names
 _GOAD_ACL_MAP = {
     "Ext-User-Force-Change-Password": "ForceChangePassword",
     "GenericWrite": "GenericWrite",
@@ -115,7 +115,7 @@ def _init_default() -> dict:
     return _materialise(raw)
 
 
-# ── Module-level "active" dataset (starts EMPTY — upload required) ─────
+# Module-level active dataset (starts empty — upload required)
 _active = _init_empty()
 
 # Convenient module-level aliases (these are the objects other modules import)
@@ -203,7 +203,7 @@ def convert_goad(raw: dict) -> dict:
             edges.append({"id": _next_eid(), "source": source,
                           "target": target, "relation": relation})
 
-    # ── Subnets (one per domain) ──
+    # Subnets (one per domain)
     subnets = []
     domain_subnet: dict[str, str] = {}
     for i, dname in enumerate(domains):
@@ -211,7 +211,7 @@ def convert_goad(raw: dict) -> dict:
         subnets.append({"id": sid, "cidr": f"10.10.{(i+1)*10}.0/24", "label": dname})
         domain_subnet[dname] = sid
 
-    # ── Host nodes ──
+    # Host nodes
     ncount = 0
     host_hostname: dict[str, str] = {}
     for hkey, hinfo in hosts.items():
@@ -224,7 +224,7 @@ def convert_goad(raw: dict) -> dict:
         subnet = domain_subnet.get(hinfo.get("domain", ""), "")
         _add_node(f"H{ncount:02d}", hostname, htype, priv, hv, subnet)
 
-    # ── Domain groups + users ──
+    # Domain groups + users
     gcount = 0
     ucount = 0
     da_groups: dict[str, str] = {}  # domain → DA group name
@@ -263,7 +263,7 @@ def convert_goad(raw: dict) -> dict:
                         _add_node(f"G{gcount:02d}", grp, "Group", "", False, subnet)
                     _add_edge(ukey, grp, "MemberOf")
 
-    # ── Host local groups → AdminTo / CanRDP edges ──
+    # Host local groups → AdminTo / CanRDP edges
     for hkey, hinfo in hosts.items():
         hostname = host_hostname[hkey]
         for member in hinfo.get("local_groups", {}).get("Administrators", []):
@@ -275,7 +275,7 @@ def convert_goad(raw: dict) -> dict:
             if name in node_names:
                 _add_edge(name, hostname, "CanRDP")
 
-    # ── Domain Admins → AdminTo + DCSync on their DC ──
+    # Domain Admins → AdminTo + DCSync on their DC
     for dname, dinfo in domains.items():
         dc_key = dinfo.get("dc", "")
         dc_hostname = host_hostname.get(dc_key, "")
@@ -284,7 +284,7 @@ def convert_goad(raw: dict) -> dict:
             _add_edge(da_name, dc_hostname, "AdminTo")
             _add_edge(da_name, dc_hostname, "DCSync")
 
-    # ── ACL edges ──
+    # ACL edges
     for dname, dinfo in domains.items():
         for acl_key, acl in dinfo.get("acls", {}).items():
             right = _GOAD_ACL_MAP.get(acl["right"])
@@ -302,7 +302,7 @@ def convert_goad(raw: dict) -> dict:
             if src in node_names and tgt in node_names:
                 _add_edge(src, tgt, right)
 
-    # ── Inferred HasSession edges (from autologon + credentials) ──
+    # Inferred HasSession edges (from autologon + credentials)
     for hkey, hinfo in hosts.items():
         hostname = host_hostname[hkey]
         # DC admins typically have sessions on their DC
@@ -325,7 +325,7 @@ def convert_goad(raw: dict) -> dict:
                 if target_host == h2info["hostname"]:
                     _add_edge(host_hostname[h2key], uname, "HasSession")
 
-    # ── MSSQL edges ──
+    # MSSQL edges
     for hkey, hinfo in hosts.items():
         hostname = host_hostname[hkey]
         mssql = hinfo.get("mssql", {})
@@ -334,7 +334,7 @@ def convert_goad(raw: dict) -> dict:
             if uname in node_names:
                 _add_edge(uname, hostname, "SQLAdmin")
 
-    # ── Child → parent domain trust (SIDHistory escalation) ──
+    # Child → parent domain trust (SIDHistory escalation)
     domain_list = list(domains.keys())
     for dname in domain_list:
         parts = dname.split(".")
@@ -347,7 +347,7 @@ def convert_goad(raw: dict) -> dict:
                 if da_child and parent_dc:
                     _add_edge(da_child, parent_dc, "GenericAll")
 
-    # ── Build start options (low-priv users with interesting outgoing edges) ──
+    # Build start options (low-priv users with interesting outgoing edges)
     edge_sources = {e["source"] for e in edges}
     start_options = [
         n["name"] for n in nodes
@@ -355,7 +355,7 @@ def convert_goad(raw: dict) -> dict:
         and n["name"] in edge_sources
     ][:4]
 
-    # ── Critical edge (GenericAll on DA group) ──
+    # Critical edge (GenericAll on DA group)
     crit_id = ""
     for e in edges:
         if e["relation"] == "GenericAll" and "Domain Admins" in e["target"]:
@@ -416,12 +416,10 @@ def validate_dataset(raw: dict) -> list[str]:
     return errors
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  SharpHound / BloodHound Integration
-# ═══════════════════════════════════════════════════════════════════════════
+# SharpHound ZIP / AD export converter
 
-# BloodHound ACE right → our relation name
-_BH_ACE_MAP: dict[str, str] = {
+# ACE right → relation name
+_ACE_MAP: dict[str, str] = {
     "GenericAll":            "GenericAll",
     "WriteDacl":             "WriteDACL",
     "WriteDACL":             "WriteDACL",
@@ -439,8 +437,8 @@ _BH_ACE_MAP: dict[str, str] = {
     "Owns":                  "Owns",
 }
 
-# BloodHound v4 recognised meta.type values
-_BH_KNOWN_TYPES = {"users", "groups", "computers", "domains", "gpos", "ous", "containers"}
+# Recognised meta.type values
+_KNOWN_TYPES = {"users", "groups", "computers", "domains", "gpos", "ous", "containers"}
 
 
 def is_sharphound_zip(content: bytes) -> bool:
@@ -448,35 +446,20 @@ def is_sharphound_zip(content: bytes) -> bool:
     return len(content) >= 2 and content[:2] == b"PK"
 
 
-def is_bloodhound_json(raw: dict) -> bool:
-    """
-    Detect a single-file BloodHound JSON (one type per file, with a 'meta' block).
-    BloodHound CE unified files also match here.
-    """
+def is_ad_export_json(raw: dict) -> bool:
+    """Detect a single-file AD export JSON (one type per file, with a 'meta' block)."""
     meta = raw.get("meta", {})
-    return "data" in raw and meta.get("type") in _BH_KNOWN_TYPES
+    return "data" in raw and meta.get("type") in _KNOWN_TYPES
 
 
-def _bh_clean_name(full: str) -> str:
-    """
-    'MUDREK@CIS.SQU.EDU.OM'  →  'mudrek'
-    'CIS-DC01.CIS.SQU.EDU.OM' → 'cis-dc01'
-    Already clean names are returned lowercased.
-    """
+def _clean_name(full: str) -> str:
+    """Strip domain suffix from a full AD name and lowercase it."""
     return full.split("@")[0].split(".")[0].lower() if full else ""
 
 
 def convert_sharphound_zip(content: bytes) -> dict:
-    """
-    Convert a SharpHound ZIP export (BloodHound v3/v4 format) into our
-    native dataset format.
-
-    SharpHound outputs a .zip containing per-type JSON files:
-      users.json, groups.json, computers.json, domains.json, sessions.json
-    Each file has the shape:
-      { "meta": { "type": "users", ... }, "data": [ <objects> ] }
-    """
-    # ── 1. Extract all JSON files from the ZIP ──────────────────────────
+    """Convert a SharpHound ZIP export into the app's native dataset format."""
+    # Extract all JSON files from the ZIP
     type_data: dict[str, list] = {}
     with zipfile.ZipFile(io.BytesIO(content)) as zf:
         for entry in zf.namelist():
@@ -485,37 +468,33 @@ def convert_sharphound_zip(content: bytes) -> dict:
             try:
                 with zf.open(entry) as f:
                     parsed = json.load(f)
-                # Accept both meta.type and filename-based detection
                 meta_type = parsed.get("meta", {}).get("type", "")
                 if not meta_type:
                     # Guess from filename: "20231015_users.json" → "users"
                     stem = entry.rsplit("/", 1)[-1].replace(".json", "").lower()
-                    for t in _BH_KNOWN_TYPES:
+                    for t in _KNOWN_TYPES:
                         if t in stem:
                             meta_type = t
                             break
-                if meta_type in _BH_KNOWN_TYPES:
+                if meta_type in _KNOWN_TYPES:
                     type_data[meta_type] = parsed.get("data", [])
             except Exception:
-                continue  # skip malformed files
+                continue
 
-    return _convert_bloodhound_type_data(type_data)
+    return _convert_ad_type_data(type_data)
 
 
-def convert_bloodhound_json(raw: dict) -> dict:
-    """Convert a single-type BloodHound JSON file into our native format."""
+def convert_ad_export_json(raw: dict) -> dict:
+    """Convert a single-type AD export JSON file into the native format."""
     meta_type = raw.get("meta", {}).get("type", "")
-    return _convert_bloodhound_type_data({meta_type: raw.get("data", [])})
+    return _convert_ad_type_data({meta_type: raw.get("data", [])})
 
 
-def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
-    """
-    Core converter — works on a dict of { type_name → list_of_objects }.
-    Supports: users, groups, computers, domains.
-    """
-    # ── Pass 1: Build SID → clean_name + SID → object_type maps ────────
-    sid_name: dict[str, str]  = {}   # SID  → 'mudrek'
-    sid_type: dict[str, str]  = {}   # SID  → 'User' | 'Group' | 'Computer'
+def _convert_ad_type_data(type_data: dict[str, list]) -> dict:
+    """Core converter — works on a dict of { type_name → list_of_objects }."""
+    # Pass 1: Build SID → clean_name and SID → object_type maps
+    sid_name: dict[str, str]  = {}
+    sid_type: dict[str, str]  = {}
 
     _TYPE_MAP = {
         "users":     "User",
@@ -531,11 +510,11 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
             sid   = props.get("objectid") or obj.get("ObjectIdentifier", "")
             name  = props.get("name", "")
             if sid and name:
-                clean = _bh_clean_name(name)
+                clean = _clean_name(name)
                 sid_name[sid] = clean
                 sid_type[sid] = node_type
 
-    # ── Pass 2: Build nodes ─────────────────────────────────────────────
+    # Pass 2: Build nodes
     nodes:      list[dict] = []
     node_set:   set[str]   = set()
     subnets:    list[dict] = []
@@ -549,7 +528,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
         props = obj.get("Properties", {})
         raw_name = props.get("name", "")
         if "domain admins" in raw_name.lower() or "enterprise admins" in raw_name.lower():
-            da_names.add(_bh_clean_name(raw_name))
+            da_names.add(_clean_name(raw_name))
 
     def _add_node(sid: str, name: str, ntype: str, priv: str, hv: bool, subnet: str = "") -> None:
         if name and name not in node_set:
@@ -567,7 +546,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     for obj in type_data.get("users", []):
         props  = obj.get("Properties", {})
         sid    = props.get("objectid", "")
-        name   = _bh_clean_name(props.get("name", ""))
+        name   = _clean_name(props.get("name", ""))
         if not name:
             continue
         is_da  = props.get("admincount", False)
@@ -578,7 +557,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     for obj in type_data.get("groups", []):
         props  = obj.get("Properties", {})
         sid    = props.get("objectid", "")
-        name   = _bh_clean_name(props.get("name", ""))
+        name   = _clean_name(props.get("name", ""))
         if not name:
             continue
         is_priv = name in da_names
@@ -610,7 +589,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     for obj in type_data.get("computers", []):
         props  = obj.get("Properties", {})
         sid    = props.get("objectid", "")
-        name   = _bh_clean_name(props.get("name", ""))
+        name   = _clean_name(props.get("name", ""))
         if not name:
             continue
         is_dc  = (sid in dc_sids) or ("dc" in name and bool(props.get("operatingsystem", "")))
@@ -622,14 +601,14 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
             dc_names.add(name)
         _add_node(sid, name, ntype, priv, is_dc, subnet)
 
-    # ── Pass 3: Build edges ─────────────────────────────────────────────
+    # Pass 3: Build edges
     edges:   list[dict] = []
     edge_id: int        = 0
 
     def _eid() -> str:
         nonlocal edge_id
         edge_id += 1
-        return f"BH{edge_id:04d}"
+        return f"E{edge_id:04d}"
 
     def _add_edge(src: str, tgt: str, relation: str) -> None:
         if src and tgt and src != tgt and src in node_set and tgt in node_set:
@@ -647,13 +626,13 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     # Users → ACEs on users, sessions, primary group
     for obj in type_data.get("users", []):
         props   = obj.get("Properties", {})
-        name    = _bh_clean_name(props.get("name", ""))
+        name    = _clean_name(props.get("name", ""))
         if not name:
             continue
         # ACEs: other principals have rights over THIS user
         for ace in obj.get("Aces", []):
             src  = _resolve(ace.get("PrincipalSID", ""))
-            rel  = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            rel  = _ACE_MAP.get(ace.get("RightName", ""))
             if src and rel and not ace.get("IsInherited", False):
                 _add_edge(src, name, rel)
         # Primary group membership
@@ -671,7 +650,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     # Groups → Members (MemberOf) + ACEs on groups
     for obj in type_data.get("groups", []):
         props    = obj.get("Properties", {})
-        grp_name = _bh_clean_name(props.get("name", ""))
+        grp_name = _clean_name(props.get("name", ""))
         if not grp_name:
             continue
         for member in obj.get("Members", []):
@@ -680,14 +659,14 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
                 _add_edge(src, grp_name, "MemberOf")
         for ace in obj.get("Aces", []):
             src = _resolve(ace.get("PrincipalSID", ""))
-            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            rel = _ACE_MAP.get(ace.get("RightName", ""))
             if src and rel and not ace.get("IsInherited", False):
                 _add_edge(src, grp_name, rel)
 
     # Computers → LocalAdmins (AdminTo), RDP users, Sessions, ACEs
     for obj in type_data.get("computers", []):
         props      = obj.get("Properties", {})
-        comp_name  = _bh_clean_name(props.get("name", ""))
+        comp_name  = _clean_name(props.get("name", ""))
         if not comp_name:
             continue
 
@@ -714,7 +693,7 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
 
         for ace in obj.get("Aces", []):
             src = _resolve(ace.get("PrincipalSID", ""))
-            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            rel = _ACE_MAP.get(ace.get("RightName", ""))
             if src and rel and not ace.get("IsInherited", False):
                 _add_edge(src, comp_name, rel)
 
@@ -722,14 +701,14 @@ def _convert_bloodhound_type_data(type_data: dict[str, list]) -> dict:
     for obj in type_data.get("domains", []):
         for ace in obj.get("Aces", []):
             src = _resolve(ace.get("PrincipalSID", ""))
-            rel = _BH_ACE_MAP.get(ace.get("RightName", ""))
+            rel = _ACE_MAP.get(ace.get("RightName", ""))
             if src and rel and not ace.get("IsInherited", False):
                 # Target the DC for domain-level ACEs
                 for dc in dc_names:
                     _add_edge(src, dc, rel)
                     break   # one edge per ACE is enough
 
-    # ── Pass 4: Prune orphan edges, build metadata ──────────────────────
+    # Pass 4: Prune orphan edges, build metadata
     edges = [e for e in edges if e["source"] in node_set and e["target"] in node_set]
 
     edge_sources = {e["source"] for e in edges}

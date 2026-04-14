@@ -1,9 +1,8 @@
 """
-Explanation Engine — generates human-readable step-by-step attack chain
-reasoning, including MITRE ATT&CK kill-chain phase classification.
+Explanation Engine — generates step-by-step attack chain breakdowns.
 """
 
-# ── Kill-chain phase per relation ───────────────────────────────────────────
+# Kill-chain phase per relation
 KILL_CHAIN_PHASE: dict[str, str] = {
     "MemberOf":           "Reconnaissance",
     "HasSession":         "Credential Access",
@@ -21,26 +20,6 @@ KILL_CHAIN_PHASE: dict[str, str] = {
     "AllExtendedRights":  "Privilege Escalation",
     "Owns":               "Privilege Escalation",
     "SQLAdmin":           "Execution",
-}
-
-# ── MITRE ATT&CK technique IDs ─────────────────────────────────────────────
-MITRE_TECHNIQUE: dict[str, str] = {
-    "HasSession":         "T1003 (Credential Dumping)",
-    "CanRDP":             "T1021.001 (Remote Desktop Protocol)",
-    "AdminTo":            "T1078 (Valid Accounts — Admin)",
-    "WriteDACL":          "T1222 (File & Directory Permissions Modification)",
-    "GenericAll":         "T1078 (Valid Accounts — Full Control)",
-    "GenericWrite":       "T1098 (Account Manipulation)",
-    "WriteOwner":         "T1222 (Permissions Modification)",
-    "AddSelf":            "T1098 (Account Manipulation)",
-    "AddMember":          "T1098 (Account Manipulation)",
-    "ForceChangePassword":"T1098.001 (Account Manipulation — Password)",
-    "DCSync":             "T1003.006 (DCSync)",
-    "ReadLAPSPassword":   "T1552 (Unsecured Credentials — LAPS)",
-    "AllExtendedRights":  "T1078 (Valid Accounts)",
-    "DCSync":             "T1003.006 (OS Credential Dumping — DCSync)",
-    "SQLAdmin":           "T1059 (Command and Scripting Interpreter — SQL)",
-    "MemberOf":           "T1069 (Permission Groups Discovery)",
 }
 
 RELATION_DESC: dict[str, str] = {
@@ -143,18 +122,6 @@ PRIV_GAIN: dict[str, str] = {
     "Owns":               "Ownership → WriteDACL on {target}",
 }
 
-# Phase labels for readable output
-_PHASE_ICON = {
-    "Reconnaissance":      "[RECON]",
-    "Credential Access":   "[CRED]",
-    "Lateral Movement":    "[LATERAL]",
-    "Privilege Escalation":"[PRIVESC]",
-    "Persistence":         "[PERSIST]",
-    "Execution":           "[EXEC]",
-    "Exfiltration":        "[EXFIL]",
-}
-
-
 def explain_path(path_info: dict) -> str:
     """Return multi-line explanation text for one attack path."""
     edges = path_info["edges"]
@@ -162,19 +129,13 @@ def explain_path(path_info: dict) -> str:
     stealth = path_info.get("stealthFactor", None)
 
     lines: list[str] = [
-        f"═══ Attack Chain: {path_info['pathId']} ═══",
-        f"Risk Score   : {path_info['risk']}",
-        f"Normalized   : {path_info.get('normalizedScore', 'N/A')}/100",
-        f"Impact       : {path_info.get('impactEstimation', 'Unknown')}",
-        f"Hops         : {path_info['hops']}",
+        f"Attack Chain: {path_info['pathId']}",
+        f"Risk Score: {path_info['risk']}  |  Normalized: {path_info.get('normalizedScore', 'N/A')}/100  |  Impact: {path_info.get('impactEstimation', 'Unknown')}  |  Hops: {path_info['hops']}",
     ]
 
     if exploit_ease is not None:
-        lines.append(f"Exploit Ease : {exploit_ease:.0%}  (1.0 = trivially easy)")
-    if stealth is not None:
-        lines.append(f"Stealth      : {stealth:.0%}  (1.0 = completely invisible)")
-
-    lines.append(f"Critical Edge: {'Yes ★' if path_info['throughCritical'] else 'No'}")
+        lines.append(f"Exploit Ease: {exploit_ease:.0%}  |  Stealth: {stealth:.0%}" if stealth is not None else f"Exploit Ease: {exploit_ease:.0%}")
+    lines.append(f"Critical Edge: {'Yes' if path_info['throughCritical'] else 'No'}")
     lines.append("")
 
     last_phase = None
@@ -185,44 +146,37 @@ def explain_path(path_info: dict) -> str:
         tgt = edge["target"]
 
         phase = KILL_CHAIN_PHASE.get(rel, "Unknown")
-        phase_icon = _PHASE_ICON.get(phase, "◆")
-        mitre = MITRE_TECHNIQUE.get(rel, "")
 
-        # Print phase header when it changes
         if phase != last_phase:
-            lines.append(f"── {phase_icon} {phase.upper()} ──")
+            lines.append(f"Phase: {phase}")
             last_phase = phase
 
         desc = RELATION_DESC.get(rel, f"connects to {tgt} via {rel}")
         desc = desc.format(source=src, target=tgt)
         priv = PRIV_GAIN.get(rel, f"Access to {tgt}").format(source=src, target=tgt)
 
-        lines.append(f"STEP {step}: {src}")
-        lines.append(f"  │ {desc}")
-        lines.append(f"  │ Privilege gained : {priv}")
-        if mitre:
-            lines.append(f"  │ MITRE ATT&CK    : {mitre}")
+        lines.append(f"Step {step}: {src} -> {tgt}  [{rel}]")
+        for line in desc.splitlines():
+            lines.append(f"  {line.strip()}")
+        lines.append(f"  Privilege gained: {priv}")
 
-        if step < len(edges):
-            lines.append("  ▼")
-        else:
-            lines.append("  ▼")
-            lines.append(f"RESULT: {tgt} — Target Compromised ★")
+        if step == len(edges):
+            lines.append("")
+            lines.append(f"Result: {tgt} compromised")
 
     lines.append("")
-    lines.append("── Risk Breakdown ──")
+    lines.append("Risk Breakdown:")
     cumulative = 0
     for i, edge in enumerate(edges):
         cumulative += edge["weight"]
-        ease = KILL_CHAIN_PHASE.get(edge["relation"], "?")
+        phase = KILL_CHAIN_PHASE.get(edge["relation"], "?")
         lines.append(
             f"  Step {i+1}: [{edge['edgeId']}] {edge['relation']}"
             f"  weight={edge['weight']}, cumulative={cumulative}"
-            f"  | phase: {ease}"
+            f"  phase: {phase}"
         )
 
     lines.append(
-        f"  Total weight: {path_info['sumWeights']} hops: {path_info['hops']}"
-        f"  → Risk: {path_info['risk']}"
+        f"  Total weight: {path_info['sumWeights']}  hops: {path_info['hops']}  risk: {path_info['risk']}"
     )
     return "\n".join(lines)

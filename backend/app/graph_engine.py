@@ -23,7 +23,7 @@ import networkx as nx
 
 from . import dataset as ds
 
-# ── Privilege level weights ─────────────────────────────────────────────────
+# Privilege level weights
 PRIV_WEIGHT = {
     "Low": 1.0,
     "Mid-Low": 1.5,
@@ -38,7 +38,7 @@ PRIV_WEIGHT = {
 HV_MULTIPLIER = 2.0
 MAX_RESULTS_DEFAULT = 20
 
-# ── Multi-factor: Exploit Ease (1.0 = trivial, 0.6 = needs specialist tools) ─
+# Multi-factor: Exploit Ease (1.0 = trivial, 0.6 = needs specialist tools)
 EXPLOIT_EASE: dict[str, float] = {
     "MemberOf": 1.00,
     "GenericAll": 0.95,
@@ -58,7 +58,7 @@ EXPLOIT_EASE: dict[str, float] = {
     "WriteOwner": 0.70,
 }
 
-# ── Multi-factor: Stealth (1.0 = invisible, 0.4 = very noisy / triggers alerts) ─
+# Multi-factor: Stealth (1.0 = invisible, 0.4 = very noisy / triggers alerts)
 STEALTH: dict[str, float] = {
     "MemberOf": 1.00,
     "ReadLAPSPassword": 0.85,
@@ -94,7 +94,7 @@ class GraphEngine:
         self._node_map: dict[str, dict] = {}
         self._build()
 
-    # ── graph construction ──────────────────────────────────────────────────
+    # graph construction
     def _build(self):
         for n in self.nodes:
             self.G.add_node(n["name"], **n)
@@ -113,7 +113,7 @@ class GraphEngine:
         eng._node_map = {n["name"]: n for n in eng.nodes}
         return eng
 
-    # ── mutations ───────────────────────────────────────────────────────────
+    # mutations
     def remove_edge(self, edge_id: str) -> bool:
         for u, v, k in list(self.G.edges(keys=True)):
             if k == edge_id:
@@ -142,7 +142,7 @@ class GraphEngine:
         self.G.add_edge(source, target, key=eid, id=eid, relation=relation, weight=weight)
         return eid
 
-    # ── multi-factor risk scoring ───────────────────────────────────────────
+    # multi-factor risk scoring
     def _compute_path_risk(
         self, path: list[str], edges_info: list[dict], sum_weights: int, hops: int
     ) -> dict:
@@ -213,7 +213,7 @@ class GraphEngine:
             "stealthFactor": round(stealth, 3),
         }
 
-    # ── path finding ────────────────────────────────────────────────────────
+    # path finding
     def find_paths(
         self,
         start_nodes: list[str],
@@ -282,7 +282,7 @@ class GraphEngine:
                 crit = True
         return edges_info, edge_types, sw, crit
 
-    # ── critical edge aggregation ───────────────────────────────────────────
+    # critical edge aggregation
     def compute_critical_edges(self, paths: list[dict]) -> list[dict]:
         total = len(paths)
         if total == 0:
@@ -306,7 +306,7 @@ class GraphEngine:
     def global_risk(paths: list[dict]) -> float:
         return round(sum(p["risk"] for p in paths), 2)
 
-    # ── critical node identification (betweenness centrality) ───────────────
+    # critical node identification (betweenness centrality)
     def compute_critical_nodes(self, paths: list[dict] | None = None) -> list[dict]:
         """
         Rank nodes by betweenness centrality on the full graph.
@@ -345,7 +345,7 @@ class GraphEngine:
         results.sort(key=lambda x: x["criticalityScore"], reverse=True)
         return results[:15]
 
-    # ── rule-based mitigation suggestions ──────────────────────────────────
+    # rule-based mitigation suggestions
     def generate_mitigations(self, paths: list[dict], critical_edges: list[dict]) -> list[dict]:
         """
         Generate rule-based mitigation suggestions from analysis results.
@@ -464,7 +464,7 @@ class GraphEngine:
         mitigations.sort(key=lambda m: order.get(m["priority"], 4))
         return mitigations
 
-    # ── neighbor finding ────────────────────────────────────────────────────
+    # neighbor finding
     def get_neighbors(self, node_name: str, radius: int = 2) -> dict:
         if node_name not in self.G:
             return {"nodes": [], "edges": []}
@@ -485,7 +485,7 @@ class GraphEngine:
         relevant_edges = [e for e in self.edges if e["source"] in visited and e["target"] in visited]
         return {"nodes": [n for n in self.nodes if n["name"] in visited], "edges": relevant_edges}
 
-    # ── Defense ROI calculator ───────────────────────────────────────────────
+    # Defense ROI calculator
     def compute_defense_roi(self, result: dict) -> list[dict]:
         """
         For each critical edge, simulate its removal and compute ROI metrics:
@@ -576,7 +576,7 @@ class GraphEngine:
         roi_items.sort(key=lambda x: x["roiScore"], reverse=True)
         return roi_items
 
-    # ── What-If Timeline ─────────────────────────────────────────────────────
+    # What-If Timeline
     def compute_timeline(
         self,
         start_nodes: list[str],
@@ -686,7 +686,7 @@ class GraphEngine:
 
         return timeline_points
 
-    # ── combined analysis ───────────────────────────────────────────────────
+    # combined analysis
     def analyze(self, start_nodes, target, min_depth=4, max_depth=7, k=MAX_RESULTS_DEFAULT) -> dict:
         paths = self.find_paths(start_nodes, target, min_depth, max_depth, k)
         crit = self.compute_critical_edges(paths)
