@@ -1,6 +1,6 @@
 /* ── API client — talks to FastAPI backend on port 8000 ──────────────── */
 
-export const API = 'http://localhost:8000';
+export const API = 'https://attack-forecaster-backend-production.up.railway.app';
 
 export async function fetchGraph() {
   const r = await fetch(`${API}/graph`);
