@@ -115,8 +115,8 @@ def _init_default() -> dict:
     return _materialise(raw)
 
 
-# Module-level active dataset (starts empty — upload required)
-_active = _init_empty()
+# Module-level active dataset (starts with default demo dataset)
+_active = _init_default()
 
 # Convenient module-level aliases (these are the objects other modules import)
 WEIGHTS: dict          = _active["WEIGHTS"]
